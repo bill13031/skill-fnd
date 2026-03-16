@@ -1,0 +1,90 @@
+{
+  "general_skills": [
+    {
+      "skill_id": "gen_001",
+      "title": "Decompose the claim",
+      "principle": "Break the post into concrete factual claims before judging it.",
+      "when_to_apply": "At the start of every verification episode."
+    },
+    {
+      "skill_id": "gen_002",
+      "title": "Cross-check modalities",
+      "principle": "Compare post text, transcript, OCR, and frame descriptions for consistency.",
+      "when_to_apply": "When a post includes both text and video evidence."
+    },
+    {
+      "skill_id": "gen_003",
+      "title": "Prefer specific evidence",
+      "principle": "Base the verdict on explicit statements, dates, labels, and visible context rather than vibe-based guesses.",
+      "when_to_apply": "Before writing the final verdict."
+    },
+    {
+      "skill_id": "gen_004",
+      "title": "Handle uncertainty honestly",
+      "principle": "If the provided evidence is insufficient, prefer an unverified verdict over overclaiming.",
+      "when_to_apply": "When evidence is incomplete or ambiguous."
+    }
+  ],
+  "task_specific_skills": {
+    "manipulated_media": [
+      {
+        "skill_id": "mm_001",
+        "title": "Look for impossible visual claims",
+        "principle": "Check whether text overlays or narration make absolute medical, political, or scientific claims unsupported by the frame context.",
+        "when_to_apply": "When dramatic certainty appears in captions or audio."
+      }
+    ],
+    "misleading_caption": [
+      {
+        "skill_id": "mc_001",
+        "title": "Separate caption from evidence",
+        "principle": "Treat the caption as a claim to verify, not as evidence by itself.",
+        "when_to_apply": "When the post caption makes a strong assertion."
+      }
+    ],
+    "out_of_context": [
+      {
+        "skill_id": "oc_001",
+        "title": "Verify time cues",
+        "principle": "Search transcript, OCR, and frame descriptions for timestamps, archive labels, or signs that the video predates the claimed event.",
+        "when_to_apply": "When the post says the clip is recent or tied to a current event."
+      }
+    ],
+    "source_credibility": [
+      {
+        "skill_id": "sc_001",
+        "title": "Inspect source signals",
+        "principle": "Use metadata such as author, platform context, and official language in transcript/OCR to assess whether the source looks authoritative.",
+        "when_to_apply": "When authenticity depends on who is publishing the post."
+      }
+    ],
+    "temporal_inconsistency": [
+      {
+        "skill_id": "ti_001",
+        "title": "Resolve timeline conflicts",
+        "principle": "A mismatch between claimed date and visible/archive date is strong evidence of misinformation.",
+        "when_to_apply": "When time references appear in the post or frames."
+      }
+    ]
+  },
+  "common_mistakes": [
+    {
+      "mistake_id": "err_001",
+      "description": "Calling a post fake without citing concrete evidence.",
+      "why_it_happens": "The model reacts to suspicious tone instead of grounded details.",
+      "how_to_avoid": "Quote specific transcript, OCR, or frame clues in the verdict evidence list."
+    },
+    {
+      "mistake_id": "err_002",
+      "description": "Treating loud confidence as truth.",
+      "why_it_happens": "Misinformation often uses absolute wording.",
+      "how_to_avoid": "Down-rank unsupported absolute claims unless the evidence package substantiates them."
+    },
+    {
+      "mistake_id": "err_003",
+      "description": "Ignoring archive or timestamp markers.",
+      "why_it_happens": "Temporal clues are often small and easy to miss.",
+      "how_to_avoid": "Inspect OCR and frame descriptions before issuing a verdict."
+    }
+  ]
+}
