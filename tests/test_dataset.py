@@ -1,4 +1,4 @@
-from fake_news_skillrl.dataset import load_normalized_samples, normalize_records
+from fake_news_skillrl.dataset import infer_split, load_normalized_samples, normalize_records
 
 
 def test_normalize_records_round_trip():
@@ -25,3 +25,9 @@ def test_load_smoke_samples():
     samples = load_normalized_samples("data/raw/smoke_samples.jsonl")
     assert len(samples) == 3
     assert samples[0].sample_id == "smoke-001"
+
+
+def test_infer_split_boundaries():
+    assert infer_split(0, 10) == "train"
+    assert infer_split(8, 10) == "val"
+    assert infer_split(9, 10) == "test"

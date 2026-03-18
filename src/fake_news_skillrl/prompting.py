@@ -48,15 +48,17 @@ def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
         f"{evidence}\n\n"
         "## Action Rules\n"
         "1. Use exactly one action per turn.\n"
-        "2. Inspect evidence with one of:\n"
+        "2. Do not inspect the same evidence item twice.\n"
+        "3. Make progress toward a verdict. After inspecting a few key evidence sources, issue a verdict instead of looping.\n"
+        "4. Inspect evidence with one of:\n"
         "   <inspect>post_text</inspect>\n"
         "   <inspect>transcript</inspect>\n"
         "   <inspect>ocr_text</inspect>\n"
         "   <inspect>metadata</inspect>\n"
         "   <inspect>frame:0</inspect> (replace 0 with a valid frame index)\n"
-        "3. Finish with:\n"
+        "5. Finish with:\n"
         '   <verdict>{"label":"fake|real|unverified","rationale":"...","evidence":["..."]}</verdict>\n'
-        "4. Cite concrete evidence in the final evidence list.\n"
+        "6. Cite concrete evidence in the final evidence list.\n"
     )
 
 
@@ -73,6 +75,7 @@ def build_step_prompt(
         f"{build_initial_prompt(sample, skill_prompt)}\n"
         f"## Step\n{step_index} of {max_steps}\n"
         f"Inspected so far: {history}\n\n"
+        "If the inspected history already covers the main evidence sources, your next action should usually be a verdict.\n\n"
         "## Visible Evidence\n"
         f"{visible_evidence.strip() or 'No evidence inspected yet.'}\n"
     )

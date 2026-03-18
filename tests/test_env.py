@@ -18,3 +18,15 @@ def test_env_rollout_with_manual_actions():
     assert dones[0]
     assert rewards[0] > 0.0
     assert infos[0]["won"]
+
+
+def test_repeated_inspection_is_penalized():
+    sample = load_normalized_samples("data/raw/smoke_samples.jsonl")[0]
+    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=4))
+    env.reset([sample])
+    env.step(["<inspect>post_text</inspect>"])
+    _, rewards, dones, infos = env.step(["<inspect>post_text</inspect>"])
+    assert not dones[0]
+    assert rewards[0] < 0.0
+    assert not infos[0]["is_action_valid"]
+    assert infos[0]["error"] == "Repeated inspection is not allowed."

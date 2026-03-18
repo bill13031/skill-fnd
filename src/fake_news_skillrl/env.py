@@ -125,7 +125,13 @@ class FakeNewsEnv:
         if parsed.action_type == "inspect":
             target = parsed.payload["target"]
             if target in state.inspected_items:
-                return 0.0, {"is_action_valid": True, "inspection_target": target, "won": False}
+                state.invalid_action_count += 1
+                return self.config.invalid_action_penalty, {
+                    "is_action_valid": False,
+                    "inspection_target": target,
+                    "error": "Repeated inspection is not allowed.",
+                    "won": False,
+                }
             state.inspected_items.append(target)
             state.visible_evidence.append(self._inspection_text(state.sample, target))
             return 0.0, {"is_action_valid": True, "inspection_target": target, "won": False}
