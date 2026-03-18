@@ -24,3 +24,10 @@ def test_parse_mixed_action_invalid():
     action = "<inspect>post_text</inspect><verdict>{}</verdict>"
     parsed = parse_action(action, max_frame_index=0)
     assert not parsed.is_valid
+
+
+def test_verdict_with_embedded_inspect_stays_verdict_invalid():
+    action = '<verdict>{"label":"fake","rationale":"x","evidence":[],"action":"<inspect>post_text</inspect>"}</verdict><|im_end|>'
+    parsed = parse_action(action, max_frame_index=0)
+    assert not parsed.is_valid
+    assert parsed.action_type == "verdict"

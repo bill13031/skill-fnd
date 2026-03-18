@@ -25,7 +25,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Path to normalized JSONL output.")
     parser.add_argument("--video-dir", default="~/datasets/fakett/video", help="Directory containing Fakett videos.")
     parser.add_argument("--frames-dir", default=None, help="Optional output directory for extracted frames.")
-    parser.add_argument("--num-frames", type=int, default=2, help="Number of frames to sample per video.")
+    parser.add_argument("--num-frames", type=int, default=4, help="Number of frames to sample per video.")
     args = parser.parse_args()
 
     if args.dataset_format == "fakett":
