@@ -118,6 +118,8 @@ python scripts/evaluate.py \
   --model-name Qwen/Qwen3.5-2B
 ```
 
+The Qwen VL agent now moves the model to CUDA automatically when `torch.cuda.is_available()` is true, and falls back to CPU otherwise.
+
 ## Current Scope
 
 This project is fully runnable and testable, but the model-training layer is intentionally lightweight:

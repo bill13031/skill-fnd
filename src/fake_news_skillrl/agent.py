@@ -13,6 +13,10 @@ from .schema import FakeNewsSample, FrameRecord
 DEFAULT_QWEN_VL_MODEL = "Qwen/Qwen3.5-2B"
 
 
+def select_inference_device(cuda_available: bool) -> str:
+    return "cuda" if cuda_available else "cpu"
+
+
 class BaseFakeNewsAgent(ABC):
     model_name: str
 
@@ -105,6 +109,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
 
     def __post_init__(self) -> None:
         try:
+            import torch
             from transformers import AutoModelForImageTextToText, AutoProcessor
         except ImportError as exc:
             raise ImportError(
@@ -112,6 +117,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
                 "Install it first or use the heuristic agent."
             ) from exc
 
+        self._device = select_inference_device(torch.cuda.is_available())
         self._processor = AutoProcessor.from_pretrained(
             self.model_name,
             trust_remote_code=self.trust_remote_code,
@@ -120,6 +126,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
             self.model_name,
             trust_remote_code=self.trust_remote_code,
         )
+        self._model.to(self._device)
         self._model.eval()
 
     def next_action(
@@ -136,7 +143,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
             return_dict=True,
             return_tensors="pt",
         )
-        inputs = inputs.to(self._model.device)
+        inputs = inputs.to(self._device)
         outputs = self._model.generate(
             **inputs,
             max_new_tokens=self.max_new_tokens,
