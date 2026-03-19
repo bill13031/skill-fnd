@@ -159,7 +159,6 @@ def normalize_fakett_file(
                 },
                 "frames": frames,
                 "label": str(row.get("annotation", "unverified")).lower(),
-                "gold_evidence": [item for item in [event, description] if item],
                 "split": infer_split(index, total),
                 "data_source": "fakett",
             }

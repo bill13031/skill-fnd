@@ -38,8 +38,9 @@ def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
     evidence = "\n".join(available_evidence_lines(sample))
     metadata_summary = summarize_metadata(sample.metadata)
     return (
-        "You are an investigative fake-news verification agent.\n"
-        "Decide whether the post is factual using only the provided evidence package.\n\n"
+        "You are a short-video content credibility analyst.\n"
+        "Your job is to judge whether the post contains misleading or non-factual content using only the provided evidence package.\n"
+        "Do not punish harmless humor, metaphor, excitement, or obvious exaggeration unless the post is making a concrete misleading factual claim.\n\n"
         f"{build_skill_section(skill_prompt)}"
         "## Case Summary\n"
         f"Post text: {sample.post_text}\n"
@@ -58,7 +59,11 @@ def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
         "   <inspect>frame:0</inspect> (replace 0 with a valid frame index)\n"
         "5. Finish with:\n"
         '   <verdict>{"label":"fake|real|unverified","rationale":"...","evidence":["..."]}</verdict>\n'
-        "6. Cite concrete evidence in the final evidence list.\n"
+        "6. Label meaning:\n"
+        "   - fake: the post contains misleading or non-factual content presented as true or documentary.\n"
+        "   - real: the post is factual, benign, or expressive without making a misleading factual claim.\n"
+        "   - unverified: the provided evidence is insufficient.\n"
+        "7. Cite concrete evidence in the final evidence list.\n"
     )
 
 

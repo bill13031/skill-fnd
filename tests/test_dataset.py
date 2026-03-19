@@ -31,3 +31,21 @@ def test_infer_split_boundaries():
     assert infer_split(0, 10) == "train"
     assert infer_split(8, 10) == "val"
     assert infer_split(9, 10) == "test"
+
+
+def test_gold_evidence_is_optional():
+    rows = [
+        {
+            "sample_id": "id-2",
+            "post_text": "post",
+            "transcript": "",
+            "ocr_text": "",
+            "metadata": {"task_type": "unknown"},
+            "frames": [],
+            "label": "real",
+            "split": "train",
+            "data_source": "unit",
+        }
+    ]
+    normalized = normalize_records(rows)
+    assert normalized[0]["label"] == "real"

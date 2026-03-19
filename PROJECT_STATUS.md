@@ -19,6 +19,10 @@ Build a standalone SkillRL-style fake news detection project that can:
   - reads `samples.jsonl`,
   - links rows to `[video_id].mp4`,
   - optionally extracts frames when OpenCV is installed.
+- Task framing updated from generic fake-news detection to short-video credibility assessment:
+  - misleading or non-factual content should be flagged,
+  - playful exaggeration or metaphor can pass when it is not making a concrete misleading factual claim.
+- `gold_evidence` is now optional for current Fakett normalization and is not injected by default.
 - Parser hardened to treat malformed verdicts as verdict failures instead of misclassifying embedded inspect tags.
 - Real-dataset metadata bias reduced by changing Fakett `task_type` from `misleading_caption` to `unknown`.
 - Frame sampling improved to prefer non-blank mid-video frames and sample more frames by default.
@@ -27,6 +31,7 @@ Build a standalone SkillRL-style fake news detection project that can:
 
 - Qwen VL still shows a tendency to loop or overpredict `fake` on small zero-shot runs.
 - Evidence scoring is still weak for Fakett because `gold_evidence` is only lightly derived from `event` and `description`.
+- Evidence scoring for Fakett is currently minimal because `gold_evidence` may be absent by design.
 - VL quality depends heavily on actual extracted frames being present and informative.
 - The project still uses a lightweight rollout/training scaffold rather than full `verl` integration.
 

@@ -37,13 +37,14 @@ class FakeNewsSample:
 
     @property
     def task_type(self) -> str:
-        task_type = self.metadata.get("task_type", "misleading_caption")
+        task_type = self.metadata.get("task_type", "unknown")
         return str(task_type)
 
     @property
     def task_description(self) -> str:
         return (
-            f"Verify whether the online post is factual. "
+            "Review a short social-media video post and decide whether it contains misleading or non-factual content. "
+            "Allow clearly playful, metaphorical, or exaggerated content to pass if it is not making a concrete misleading factual claim. "
             f"Post text: {self.post_text.strip()} "
             f"Task type hint: {self.task_type.replace('_', ' ')}."
         )
@@ -67,7 +68,6 @@ def normalize_sample(raw: Dict[str, Any]) -> FakeNewsSample:
         "metadata",
         "frames",
         "label",
-        "gold_evidence",
         "split",
         "data_source",
     ]
@@ -92,7 +92,7 @@ def normalize_sample(raw: Dict[str, Any]) -> FakeNewsSample:
         metadata=dict(raw["metadata"]),
         frames=frames,
         label=label,  # type: ignore[arg-type]
-        gold_evidence=[str(item) for item in raw["gold_evidence"]],
+        gold_evidence=[str(item) for item in raw.get("gold_evidence", [])],
         split=str(raw["split"]),
         data_source=str(raw["data_source"]),
     )
