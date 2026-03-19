@@ -20,6 +20,13 @@ def test_parse_valid_verdict():
     assert parsed.payload["label"] == "fake"
 
 
+def test_parse_unverified_verdict_invalid():
+    action = '<verdict>{"label":"unverified","rationale":"not enough","evidence":[]}</verdict>'
+    parsed = parse_action(action, max_frame_index=0)
+    assert not parsed.is_valid
+    assert parsed.error == "Unsupported verdict label."
+
+
 def test_parse_mixed_action_invalid():
     action = "<check>compare metadata</check><verdict>{}</verdict>"
     parsed = parse_action(action, max_frame_index=0)

@@ -12,9 +12,11 @@ from .schema import FakeNewsSample
 @dataclass(slots=True)
 class EpisodeTrace:
     sample_id: str
+    observations: List[str]
     actions: List[str]
     rewards: List[float]
     infos: List[Dict[str, object]]
+    agent_debug: List[Dict[str, object]]
 
 
 class SFTDataBuilder:
@@ -54,9 +56,16 @@ class SFTDataBuilder:
 
 
 class RolloutTrainer:
-    def __init__(self, env: FakeNewsEnv, agent: BaseFakeNewsAgent | None = None) -> None:
+    def __init__(
+        self,
+        env: FakeNewsEnv,
+        agent: BaseFakeNewsAgent | None = None,
+        max_reasoning_steps_before_forced_verdict: int = 3,
+    ) -> None:
         self.env = env
         self.agent = agent or HeuristicFakeNewsAgent()
+        self.max_reasoning_steps_before_forced_verdict = max_reasoning_steps_before_forced_verdict
+        self._forced_verdict_agent = HeuristicFakeNewsAgent(model_name="forced-verdict")
 
     def run(self, samples: Sequence[FakeNewsSample]) -> Dict[str, object]:
         traces: List[EpisodeTrace] = []
@@ -66,13 +75,37 @@ class RolloutTrainer:
         inspected_items = [[] for _ in samples]
 
         while any(active):
+            current_observations = list(observations)
             actions: List[str] = []
+            agent_debug_by_index: List[Dict[str, object]] = []
             for is_active, sample, inspected, observation in zip(active, samples, inspected_items, observations):
                 if not is_active:
                     actions.append("<create>inactive</create>")
+                    agent_debug_by_index.append({})
                     continue
                 action = self.agent.next_action(sample, inspected, observation)
+                agent_debug = getattr(self.agent, "get_last_debug", lambda: {})()
+                if (
+                    self.max_reasoning_steps_before_forced_verdict >= 0
+                    and len(inspected) >= self.max_reasoning_steps_before_forced_verdict
+                    and not action.startswith("<verdict>")
+                ):
+                    action = self._forced_verdict_agent._verdict_action(sample)
+                    agent_debug = {
+                        **agent_debug,
+                        "forced_verdict_used": True,
+                        "forced_verdict_action": action,
+                        "forced_verdict_reason": (
+                            "reached_max_reasoning_steps_before_forced_verdict"
+                        ),
+                    }
+                else:
+                    agent_debug = {
+                        **agent_debug,
+                        "forced_verdict_used": False,
+                    }
                 actions.append(action)
+                agent_debug_by_index.append(agent_debug)
 
             observations, rewards, dones, infos = self.env.step(actions)
             for index, action in enumerate(actions):
@@ -80,15 +113,19 @@ class RolloutTrainer:
                     traces.append(
                         EpisodeTrace(
                             sample_id=samples[index].sample_id,
+                            observations=[],
                             actions=[],
                             rewards=[],
                             infos=[],
+                            agent_debug=[],
                         )
                     )
                 if active[index]:
+                    traces[index].observations.append(current_observations[index])
                     traces[index].actions.append(action)
                     traces[index].rewards.append(rewards[index])
                     traces[index].infos.append(infos[index])
+                    traces[index].agent_debug.append(agent_debug_by_index[index])
                     if infos[index].get("is_action_valid"):
                         if action.startswith("<create>"):
                             inspected_items[index].append(f"create: {action}")

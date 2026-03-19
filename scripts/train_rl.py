@@ -26,6 +26,18 @@ def main() -> None:
     parser.add_argument("--model-name", default=None, help="Local or HF model name for the VL agent.")
     parser.add_argument("--max-new-tokens", type=int, default=160)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument(
+        "--attach-frames-first-step-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Attach frame images only on the first reasoning step for VL agents.",
+    )
+    parser.add_argument(
+        "--max-reasoning-steps-before-forced-verdict",
+        type=int,
+        default=3,
+        help="Force a heuristic fallback verdict after this many valid reasoning steps if the agent still has not produced one.",
+    )
     parser.add_argument("--trust-remote-code", action="store_true")
     args = parser.parse_args()
 
@@ -38,8 +50,13 @@ def main() -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
         trust_remote_code=args.trust_remote_code,
+        attach_frames_first_step_only=args.attach_frames_first_step_only,
     )
-    trainer = RolloutTrainer(env=env, agent=agent)
+    trainer = RolloutTrainer(
+        env=env,
+        agent=agent,
+        max_reasoning_steps_before_forced_verdict=args.max_reasoning_steps_before_forced_verdict,
+    )
     results = trainer.run(samples)
     print(json.dumps(results["metrics"], indent=2))
 

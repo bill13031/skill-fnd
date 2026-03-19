@@ -144,10 +144,20 @@ python scripts/evaluate.py \
   --input data/normalized/samples.normalized.jsonl \
   --skill-bank memory_data/fake_news/claude_style_skills.json \
   --agent-type qwen_vl \
-  --model-name ./model/Qwen3.5-2B
+  --model-name ./model/Qwen3.5-2B \
+  --max-samples 32 \
+  --max-new-tokens 48 \
+  --attach-frames-first-step-only \
+  --max-reasoning-steps-before-forced-verdict 2
 ```
 
 The Qwen VL agent now moves the model to CUDA automatically when `torch.cuda.is_available()` is true, and falls back to CPU otherwise.
+
+Runtime notes:
+
+- Evaluation with a VL model is sequential in this standalone project, so reducing `--max-new-tokens` and `--max-samples` is often the fastest way to iterate.
+- `--attach-frames-first-step-only` is enabled by default and prevents re-sending every frame image on later reasoning steps.
+- `--max-reasoning-steps-before-forced-verdict` keeps the rollout from spending too many generations on intermediate actions before emitting a fallback verdict.
 
 ## Current Scope
 

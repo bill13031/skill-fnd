@@ -24,12 +24,27 @@ def main() -> None:
     parser.add_argument("--skill-bank", required=True, help="Path to skill bank JSON.")
     parser.add_argument("--agent-type", default="heuristic", choices=["heuristic", "qwen_vl", "transformers"])
     parser.add_argument("--model-name", default=None, help="Local or HF model name for the VL agent.")
+    parser.add_argument("--max-samples", type=int, default=None, help="Optional cap on the number of samples to evaluate.")
     parser.add_argument("--max-new-tokens", type=int, default=160)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument(
+        "--attach-frames-first-step-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Attach frame images only on the first reasoning step for VL agents.",
+    )
+    parser.add_argument(
+        "--max-reasoning-steps-before-forced-verdict",
+        type=int,
+        default=3,
+        help="Force a heuristic fallback verdict after this many valid reasoning steps if the agent still has not produced one.",
+    )
     parser.add_argument("--trust-remote-code", action="store_true")
     args = parser.parse_args()
 
     samples = load_normalized_samples(args.input)
+    if args.max_samples is not None:
+        samples = samples[: max(0, args.max_samples)]
     memory = SkillsOnlyMemory(args.skill_bank)
     env = FakeNewsEnv(config=FakeNewsEnvConfig(), memory=memory)
     agent = build_agent(
@@ -38,8 +53,13 @@ def main() -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
         trust_remote_code=args.trust_remote_code,
+        attach_frames_first_step_only=args.attach_frames_first_step_only,
     )
-    results = RolloutTrainer(env=env, agent=agent).run(samples)
+    results = RolloutTrainer(
+        env=env,
+        agent=agent,
+        max_reasoning_steps_before_forced_verdict=args.max_reasoning_steps_before_forced_verdict,
+    ).run(samples)
     print(json.dumps(results, indent=2))
 
 

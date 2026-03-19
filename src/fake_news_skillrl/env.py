@@ -12,7 +12,6 @@ from .schema import FakeNewsSample
 @dataclass(slots=True)
 class FakeNewsEnvConfig:
     max_steps: int = 4
-    allow_unverified_label: bool = True
     require_evidence_before_verdict: bool = False
     invalid_action_penalty: float = -0.2
     correct_label_reward: float = 1.0
@@ -156,9 +155,6 @@ class FakeNewsEnv:
     def _score_verdict(self, state: EpisodeState) -> float:
         assert state.final_verdict is not None
         label = state.final_verdict["label"]
-        if label == "unverified" and not self.config.allow_unverified_label:
-            return self.config.wrong_label_penalty
-
         reward = self.config.correct_label_reward if label == state.sample.label else self.config.wrong_label_penalty
         reward += self.config.evidence_match_reward * self._evidence_match_rate(
             state.final_verdict.get("evidence", []),

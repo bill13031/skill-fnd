@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, Iterable, List
 
 
-LABELS = ["fake", "real", "unverified"]
+LABELS = ["fake", "real"]
 
 
 def _safe_divide(numerator: float, denominator: float) -> float:
@@ -18,7 +18,6 @@ def compute_classification_metrics(results: Iterable[Dict[str, object]]) -> Dict
             "macro_f1": 0.0,
             "fake_f1": 0.0,
             "real_f1": 0.0,
-            "unverified_f1": 0.0,
             "evidence_match_rate": 0.0,
             "invalid_action_rate": 0.0,
         }
@@ -54,7 +53,6 @@ def compute_classification_metrics(results: Iterable[Dict[str, object]]) -> Dict
         "macro_f1": macro_f1,
         "fake_f1": f1_scores["fake"],
         "real_f1": f1_scores["real"],
-        "unverified_f1": f1_scores["unverified"],
         "evidence_match_rate": evidence_rate,
         "invalid_action_rate": invalid_rate,
     }

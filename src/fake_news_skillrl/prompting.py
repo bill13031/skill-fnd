@@ -57,11 +57,10 @@ def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
         "   <check>state what evidence supports or contradicts a claim within the provided case package</check>\n"
         "   <use_skill>state which retrieved skill or principle you are applying</use_skill>\n"
         "4. Finish with:\n"
-        '   <verdict>{"label":"fake|real|unverified","rationale":"...","evidence":["..."]}</verdict>\n'
+        '   <verdict>{"label":"fake|real","rationale":"...","evidence":["..."]}</verdict>\n'
         "5. Label meaning:\n"
         "   - fake: the post contains misleading or non-factual content presented as true or documentary.\n"
         "   - real: the post is factual, benign, or expressive without making a misleading factual claim.\n"
-        "   - unverified: the provided evidence is insufficient.\n"
         "6. Cite concrete evidence in the final evidence list.\n"
     )
 

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Sequence
+from typing import Any, Dict, List, Sequence
 
 from .parser import parse_action
 from .schema import FakeNewsSample, FrameRecord
@@ -29,10 +29,14 @@ class BaseFakeNewsAgent(ABC):
     ) -> str:
         raise NotImplementedError
 
+    def get_last_debug(self) -> Dict[str, Any]:
+        return {}
+
 
 @dataclass(slots=True)
 class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
     model_name: str = "heuristic-v1"
+    last_debug: Dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def next_action(
         self,
@@ -40,15 +44,25 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         inspected_items: List[str],
         observation: str,
     ) -> str:
-        del observation
         action_kinds = [item.split(":", 1)[0] for item in inspected_items]
         if "create" not in action_kinds:
-            return "<create>Break the post into its main factual claim and any credibility risks.</create>"
-        if "check" not in action_kinds:
-            return "<check>Compare the caption, metadata, and visible frames for support or contradiction of the main claim.</check>"
-        if "use_skill" not in action_kinds:
-            return "<use_skill>Apply the most relevant credibility skill: separate expressive exaggeration from concrete misleading factual claims.</use_skill>"
-        return self._verdict_action(sample)
+            action = "<create>Break the post into its main factual claim and any credibility risks.</create>"
+        elif "check" not in action_kinds:
+            action = "<check>Compare the caption, metadata, and visible frames for support or contradiction of the main claim.</check>"
+        elif "use_skill" not in action_kinds:
+            action = "<use_skill>Apply the most relevant credibility skill: separate expressive exaggeration from concrete misleading factual claims.</use_skill>"
+        else:
+            action = self._verdict_action(sample)
+        self.last_debug = {
+            "agent_type": "heuristic",
+            "model_name": self.model_name,
+            "observation": observation,
+            "inspected_items": list(inspected_items),
+            "raw_output": action,
+            "selected_action": action,
+            "fallback_used": False,
+        }
+        return action
 
     def _verdict_action(self, sample: FakeNewsSample) -> str:
         evidence = list(sample.gold_evidence[:3])
@@ -89,9 +103,7 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
 
         if suspicious_score > trustworthy_score:
             return "fake"
-        if trustworthy_score > suspicious_score:
-            return "real"
-        return "unverified"
+        return "real"
 
     def _build_rationale(self, sample: FakeNewsSample) -> str:
         label = self._predict_label(sample)
@@ -99,7 +111,10 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
             return "The post contains unsupported or contradictory cues across text, transcript, OCR, or frame context."
         if label == "real":
             return "The available text, metadata, and frame evidence are internally consistent and source signals look credible."
-        return "The provided evidence package is insufficient for a confident factual judgment."
+        return "The available evidence does not show a concrete misleading factual claim."
+
+    def get_last_debug(self) -> Dict[str, Any]:
+        return dict(self.last_debug)
 
 
 @dataclass(slots=True)
@@ -108,6 +123,8 @@ class QwenVLAgent(BaseFakeNewsAgent):
     max_new_tokens: int = 160
     temperature: float = 0.0
     trust_remote_code: bool = False
+    attach_frames_first_step_only: bool = True
+    last_debug: Dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         try:
@@ -138,6 +155,17 @@ class QwenVLAgent(BaseFakeNewsAgent):
         observation: str,
     ) -> str:
         messages = self._build_messages(sample, observation, inspected_items)
+        self.last_debug = {
+            "agent_type": "qwen_vl",
+            "model_name": self.model_name,
+            "observation": observation,
+            "inspected_items": list(inspected_items),
+            "messages": messages,
+            "raw_output": None,
+            "selected_action": None,
+            "fallback_used": False,
+            "fallback_reason": None,
+        }
         inputs = self._processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -156,10 +184,17 @@ class QwenVLAgent(BaseFakeNewsAgent):
         generated = self._processor.decode(
             outputs[0][inputs["input_ids"].shape[-1] :],
         ).strip()
+        self.last_debug["raw_output"] = generated
         action = self._extract_first_action(generated, sample)
         if action is None:
             fallback = HeuristicFakeNewsAgent()
-            return fallback.next_action(sample, inspected_items, observation)
+            fallback_action = fallback.next_action(sample, inspected_items, observation)
+            self.last_debug["selected_action"] = fallback_action
+            self.last_debug["fallback_used"] = True
+            self.last_debug["fallback_reason"] = "model_output_did_not_parse_to_a_valid_action"
+            self.last_debug["fallback_debug"] = fallback.get_last_debug()
+            return fallback_action
+        self.last_debug["selected_action"] = action
         return action
 
     def _build_messages(
@@ -180,10 +215,12 @@ class QwenVLAgent(BaseFakeNewsAgent):
             }
         ]
 
+        should_attach_frames = (not self.attach_frames_first_step_only) or not inspected_items
         for frame in sample.frames:
-            image_part = self._frame_to_content_part(frame)
-            if image_part is not None:
-                content.append(image_part)
+            if should_attach_frames:
+                image_part = self._frame_to_content_part(frame)
+                if image_part is not None:
+                    content.append(image_part)
             if frame.description:
                 content.append(
                     {
@@ -222,6 +259,9 @@ class QwenVLAgent(BaseFakeNewsAgent):
             return stripped
         return None
 
+    def get_last_debug(self) -> Dict[str, Any]:
+        return dict(self.last_debug)
+
 
 def build_agent(
     agent_type: str,
@@ -229,6 +269,7 @@ def build_agent(
     max_new_tokens: int = 160,
     temperature: float = 0.0,
     trust_remote_code: bool = False,
+    attach_frames_first_step_only: bool = True,
 ) -> BaseFakeNewsAgent:
     if agent_type == "heuristic":
         return HeuristicFakeNewsAgent(model_name=model_name or "heuristic-v1")
@@ -238,5 +279,6 @@ def build_agent(
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             trust_remote_code=trust_remote_code,
+            attach_frames_first_step_only=attach_frames_first_step_only,
         )
     raise ValueError(f"Unsupported agent type: {agent_type}")

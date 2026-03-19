@@ -41,7 +41,7 @@ def _parse_verdict_payload(raw_payload: str, raw_action: str) -> ParsedAction:
     label = str(verdict_payload.get("label", "")).lower()
     rationale = str(verdict_payload.get("rationale", "")).strip()
     evidence = verdict_payload.get("evidence", [])
-    if label not in {"fake", "real", "unverified"}:
+    if label not in {"fake", "real"}:
         return ParsedAction(raw_action, "verdict", {}, False, "Unsupported verdict label.")
     if not rationale:
         return ParsedAction(raw_action, "verdict", {}, False, "Verdict rationale is required.")
