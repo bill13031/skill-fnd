@@ -44,26 +44,25 @@ def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
         f"{build_skill_section(skill_prompt)}"
         "## Case Summary\n"
         f"Post text: {sample.post_text}\n"
+        f"Transcript: {sample.transcript or '[not available]'}\n"
+        f"OCR text: {sample.ocr_text or '[not available]'}\n"
         f"Metadata: {metadata_summary}\n\n"
         "## Available Evidence\n"
         f"{evidence}\n\n"
         "## Action Rules\n"
         "1. Use exactly one action per turn.\n"
-        "2. Do not inspect the same evidence item twice.\n"
-        "3. Make progress toward a verdict. After inspecting a few key evidence sources, issue a verdict instead of looping.\n"
-        "4. Inspect evidence with one of:\n"
-        "   <inspect>post_text</inspect>\n"
-        "   <inspect>transcript</inspect>\n"
-        "   <inspect>ocr_text</inspect>\n"
-        "   <inspect>metadata</inspect>\n"
-        "   <inspect>frame:0</inspect> (replace 0 with a valid frame index)\n"
-        "5. Finish with:\n"
+        "2. All available evidence is already provided to you. Do not ask to inspect or reveal evidence.\n"
+        "3. Use intermediate reasoning-control actions when helpful:\n"
+        "   <create>state a claim decomposition, suspicion, or working hypothesis</create>\n"
+        "   <check>state what evidence supports or contradicts a claim within the provided case package</check>\n"
+        "   <use_skill>state which retrieved skill or principle you are applying</use_skill>\n"
+        "4. Finish with:\n"
         '   <verdict>{"label":"fake|real|unverified","rationale":"...","evidence":["..."]}</verdict>\n'
-        "6. Label meaning:\n"
+        "5. Label meaning:\n"
         "   - fake: the post contains misleading or non-factual content presented as true or documentary.\n"
         "   - real: the post is factual, benign, or expressive without making a misleading factual claim.\n"
         "   - unverified: the provided evidence is insufficient.\n"
-        "7. Cite concrete evidence in the final evidence list.\n"
+        "6. Cite concrete evidence in the final evidence list.\n"
     )
 
 
@@ -75,12 +74,13 @@ def build_step_prompt(
     max_steps: int,
     skill_prompt: str = "",
 ) -> str:
-    history = ", ".join(inspected_items) if inspected_items else "none"
+    history = "\n".join(f"- {item}" for item in inspected_items) if inspected_items else "none"
     return (
         f"{build_initial_prompt(sample, skill_prompt)}\n"
         f"## Step\n{step_index} of {max_steps}\n"
-        f"Inspected so far: {history}\n\n"
-        "If the inspected history already covers the main evidence sources, your next action should usually be a verdict.\n\n"
-        "## Visible Evidence\n"
-        f"{visible_evidence.strip() or 'No evidence inspected yet.'}\n"
+        "## Prior Action History\n"
+        f"{history}\n\n"
+        "Use create/check/use_skill to organize reasoning, then finish with a verdict.\n\n"
+        "## Evidence Reminder\n"
+        f"{visible_evidence.strip() or 'All core evidence is already shown above.'}\n"
     )

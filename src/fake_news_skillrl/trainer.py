@@ -30,9 +30,14 @@ class SFTDataBuilder:
             while True:
                 action = self.agent.next_action(sample, inspected, observation)
                 trajectory.append({"role": "assistant", "content": action})
-                if action.startswith("<inspect>"):
-                    target = action.replace("<inspect>", "").replace("</inspect>", "")
-                    inspected.append(target)
+                if action.startswith("<create>"):
+                    inspected.append(f"create: {action}")
+                    continue
+                if action.startswith("<check>"):
+                    inspected.append(f"check: {action}")
+                    continue
+                if action.startswith("<use_skill>"):
+                    inspected.append(f"use_skill: {action}")
                     continue
                 break
             rows.append(
@@ -64,7 +69,7 @@ class RolloutTrainer:
             actions: List[str] = []
             for is_active, sample, inspected, observation in zip(active, samples, inspected_items, observations):
                 if not is_active:
-                    actions.append("<inspect>post_text</inspect>")
+                    actions.append("<create>inactive</create>")
                     continue
                 action = self.agent.next_action(sample, inspected, observation)
                 actions.append(action)
@@ -84,9 +89,13 @@ class RolloutTrainer:
                     traces[index].actions.append(action)
                     traces[index].rewards.append(rewards[index])
                     traces[index].infos.append(infos[index])
-                    if action.startswith("<inspect>") and infos[index].get("is_action_valid"):
-                        target = action.replace("<inspect>", "").replace("</inspect>", "")
-                        inspected_items[index].append(target)
+                    if infos[index].get("is_action_valid"):
+                        if action.startswith("<create>"):
+                            inspected_items[index].append(f"create: {action}")
+                        elif action.startswith("<check>"):
+                            inspected_items[index].append(f"check: {action}")
+                        elif action.startswith("<use_skill>"):
+                            inspected_items[index].append(f"use_skill: {action}")
                 active[index] = not dones[index]
 
         success = self.env.success_evaluator()

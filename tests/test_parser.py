@@ -1,15 +1,15 @@
 from fake_news_skillrl.parser import parse_action
 
 
-def test_parse_valid_inspect():
-    parsed = parse_action("<inspect>frame:1</inspect>", max_frame_index=2)
+def test_parse_valid_create():
+    parsed = parse_action("<create>Check whether the claim is concrete.</create>", max_frame_index=2)
     assert parsed.is_valid
-    assert parsed.action_type == "inspect"
-    assert parsed.payload["frame_index"] == 1
+    assert parsed.action_type == "create"
+    assert "claim" in parsed.payload["content"]
 
 
-def test_parse_invalid_frame():
-    parsed = parse_action("<inspect>frame:4</inspect>", max_frame_index=1)
+def test_parse_invalid_empty_create():
+    parsed = parse_action("<create></create>", max_frame_index=1)
     assert not parsed.is_valid
 
 
@@ -21,13 +21,13 @@ def test_parse_valid_verdict():
 
 
 def test_parse_mixed_action_invalid():
-    action = "<inspect>post_text</inspect><verdict>{}</verdict>"
+    action = "<check>compare metadata</check><verdict>{}</verdict>"
     parsed = parse_action(action, max_frame_index=0)
     assert not parsed.is_valid
 
 
-def test_verdict_with_embedded_inspect_stays_verdict_invalid():
-    action = '<verdict>{"label":"fake","rationale":"x","evidence":[],"action":"<inspect>post_text</inspect>"}</verdict><|im_end|>'
+def test_verdict_with_embedded_action_stays_verdict_invalid():
+    action = '<verdict>{"label":"fake","rationale":"x","evidence":[],"action":"<check>metadata</check>"}</verdict><|im_end|>'
     parsed = parse_action(action, max_frame_index=0)
     assert not parsed.is_valid
     assert parsed.action_type == "verdict"

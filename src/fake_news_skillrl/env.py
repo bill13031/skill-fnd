@@ -46,7 +46,11 @@ class FakeNewsEnv:
             if self.memory is not None:
                 retrieved = self.memory.retrieve(task_description=sample.task_description)
                 skill_prompt = self.memory.format_for_prompt(retrieved)
-            state = EpisodeState(sample=sample, skill_prompt=skill_prompt)
+            state = EpisodeState(
+                sample=sample,
+                skill_prompt=skill_prompt,
+                visible_evidence=self._default_visible_evidence(sample),
+            )
             self._states.append(state)
             observations.append(self._render_observation(state))
         return observations
@@ -122,25 +126,20 @@ class FakeNewsEnv:
                 "won": False,
             }
 
-        if parsed.action_type == "inspect":
-            target = parsed.payload["target"]
-            if target in state.inspected_items:
-                state.invalid_action_count += 1
-                return self.config.invalid_action_penalty, {
-                    "is_action_valid": False,
-                    "inspection_target": target,
-                    "error": "Repeated inspection is not allowed.",
-                    "won": False,
-                }
-            state.inspected_items.append(target)
-            state.visible_evidence.append(self._inspection_text(state.sample, target))
-            return 0.0, {"is_action_valid": True, "inspection_target": target, "won": False}
+        if parsed.action_type in {"create", "check", "use_skill"}:
+            content = parsed.payload["content"]
+            state.inspected_items.append(f"{parsed.action_type}: {content}")
+            return 0.0, {
+                "is_action_valid": True,
+                "reasoning_action": parsed.action_type,
+                "won": False,
+            }
 
         if self.config.require_evidence_before_verdict and not state.inspected_items:
             state.invalid_action_count += 1
             return self.config.invalid_action_penalty, {
                 "is_action_valid": False,
-                "error": "At least one evidence inspection is required before verdict.",
+                "error": "At least one reasoning action is required before verdict.",
                 "won": False,
             }
 
@@ -167,20 +166,16 @@ class FakeNewsEnv:
         )
         return reward
 
-    def _inspection_text(self, sample: FakeNewsSample, target: str) -> str:
-        if target == "post_text":
-            return f"[post_text]\n{sample.post_text}"
-        if target == "transcript":
-            return f"[transcript]\n{sample.transcript}"
-        if target == "ocr_text":
-            return f"[ocr_text]\n{sample.ocr_text}"
-        if target == "metadata":
-            return f"[metadata]\n{sample.metadata}"
-        if target.startswith("frame:"):
-            index = int(target.split(":", 1)[1])
-            frame = sample.frames[index]
-            return f"[frame:{index}]\npath={frame.path}\ndescription={frame.description}"
-        raise ValueError(f"Unsupported inspect target: {target}")
+    def _default_visible_evidence(self, sample: FakeNewsSample) -> List[str]:
+        evidence = [
+            f"[post_text]\n{sample.post_text}",
+            f"[transcript]\n{sample.transcript or '[not available]'}",
+            f"[ocr_text]\n{sample.ocr_text or '[not available]'}",
+            f"[metadata]\n{sample.metadata}",
+        ]
+        for index, frame in enumerate(sample.frames):
+            evidence.append(f"[frame:{index}]\npath={frame.path}\ndescription={frame.description}")
+        return evidence
 
     @staticmethod
     def _evidence_match_rate(predicted_evidence: Sequence[str], gold_evidence: Sequence[str]) -> float:

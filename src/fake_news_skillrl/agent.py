@@ -41,11 +41,13 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         observation: str,
     ) -> str:
         del observation
-        inspection_order = ["post_text", "transcript", "metadata"]
-        for target in inspection_order:
-            if target not in inspected_items:
-                return f"<inspect>{target}</inspect>"
-
+        action_kinds = [item.split(":", 1)[0] for item in inspected_items]
+        if "create" not in action_kinds:
+            return "<create>Break the post into its main factual claim and any credibility risks.</create>"
+        if "check" not in action_kinds:
+            return "<check>Compare the caption, metadata, and visible frames for support or contradiction of the main claim.</check>"
+        if "use_skill" not in action_kinds:
+            return "<use_skill>Apply the most relevant credibility skill: separate expressive exaggeration from concrete misleading factual claims.</use_skill>"
         return self._verdict_action(sample)
 
     def _verdict_action(self, sample: FakeNewsSample) -> str:
@@ -172,13 +174,13 @@ class QwenVLAgent(BaseFakeNewsAgent):
                 "text": (
                     f"{observation}\n"
                     "Respond with exactly one valid action block and no extra commentary.\n"
-                    "If frame images are attached, use them together with the textual evidence.\n"
+                    "All evidence is already available in the case package.\n"
+                    "Use create, check, use_skill, and verdict actions only.\n"
                 ),
             }
         ]
 
-        attached_frames = self._frames_for_items(sample, inspected_items)
-        for frame in attached_frames:
+        for frame in sample.frames:
             image_part = self._frame_to_content_part(frame)
             if image_part is not None:
                 content.append(image_part)
@@ -190,28 +192,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
                     }
                 )
 
-        if not attached_frames:
-            for frame in sample.frames[:1]:
-                if frame.description:
-                    content.append(
-                        {
-                            "type": "text",
-                            "text": f"Available frame context: {frame.description}",
-                        }
-                    )
-
         return [{"role": "user", "content": content}]
-
-    @staticmethod
-    def _frames_for_items(sample: FakeNewsSample, inspected_items: List[str]) -> List[FrameRecord]:
-        frames: List[FrameRecord] = []
-        for item in inspected_items:
-            if not item.startswith("frame:"):
-                continue
-            index = int(item.split(":", 1)[1])
-            if 0 <= index < len(sample.frames):
-                frames.append(sample.frames[index])
-        return frames
 
     @staticmethod
     def _frame_to_content_part(frame: FrameRecord) -> dict | None:
@@ -229,13 +210,13 @@ class QwenVLAgent(BaseFakeNewsAgent):
         candidates: Sequence[str] = text.splitlines() if "\n" in text else [text]
         max_frame_index = max(0, len(sample.frames) - 1)
         for candidate in candidates:
-            candidate = candidate.strip()
+            candidate = candidate.strip().replace("<|im_end|>", "").strip()
             if not candidate:
                 continue
             parsed = parse_action(candidate, max_frame_index=max_frame_index)
             if parsed.is_valid:
                 return candidate
-        stripped = text.strip()
+        stripped = text.strip().replace("<|im_end|>", "").strip()
         parsed = parse_action(stripped, max_frame_index=max_frame_index)
         if parsed.is_valid:
             return stripped

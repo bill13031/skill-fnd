@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 
-INSPECT_RE = re.compile(r"<inspect>(.*?)</inspect>", re.IGNORECASE | re.DOTALL)
+CREATE_RE = re.compile(r"<create>(.*?)</create>", re.IGNORECASE | re.DOTALL)
+CHECK_RE = re.compile(r"<check>(.*?)</check>", re.IGNORECASE | re.DOTALL)
+USE_SKILL_RE = re.compile(r"<use_skill>(.*?)</use_skill>", re.IGNORECASE | re.DOTALL)
 VERDICT_RE = re.compile(r"<verdict>(.*?)</verdict>", re.IGNORECASE | re.DOTALL)
 
 
@@ -19,19 +21,15 @@ class ParsedAction:
     error: Optional[str] = None
 
 
-def _parse_inspect_payload(target: str, raw_action: str, max_frame_index: int) -> ParsedAction:
-    target = target.strip()
-    if target.startswith("frame:"):
-        _, _, index_str = target.partition(":")
-        if not index_str.isdigit():
-            return ParsedAction(raw_action, "inspect", {}, False, "Frame index must be numeric.")
-        index = int(index_str)
-        if index < 0 or index > max_frame_index:
-            return ParsedAction(raw_action, "inspect", {}, False, "Frame index out of range.")
-        return ParsedAction(raw_action, "inspect", {"target": f"frame:{index}", "frame_index": index}, True)
-    if target not in {"post_text", "transcript", "ocr_text", "metadata"}:
-        return ParsedAction(raw_action, "inspect", {}, False, "Unsupported inspect target.")
-    return ParsedAction(raw_action, "inspect", {"target": target}, True)
+def _parse_text_action_payload(
+    action_type: str,
+    content: str,
+    raw_action: str,
+) -> ParsedAction:
+    content = content.strip()
+    if not content:
+        return ParsedAction(raw_action, action_type, {}, False, f"{action_type} action content is required.")
+    return ParsedAction(raw_action, action_type, {"content": content}, True)
 
 
 def _parse_verdict_payload(raw_payload: str, raw_action: str) -> ParsedAction:
@@ -60,6 +58,7 @@ def _parse_verdict_payload(raw_payload: str, raw_action: str) -> ParsedAction:
 
 
 def parse_action(action: str, max_frame_index: int) -> ParsedAction:
+    del max_frame_index
     stripped = action.strip()
     if not stripped:
         return ParsedAction(
@@ -67,7 +66,7 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
             action_type="invalid",
             payload={},
             is_valid=False,
-            error="Exactly one inspect or verdict block is required.",
+            error="Exactly one create, check, use_skill, or verdict block is required.",
         )
 
     if stripped.startswith("<verdict>"):
@@ -76,26 +75,41 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
             return ParsedAction(action, "verdict", {}, False, "Verdict action must be a single complete <verdict> block.")
         return _parse_verdict_payload(match.group(1), action)
 
-    if stripped.startswith("<inspect>"):
-        match = INSPECT_RE.fullmatch(stripped)
+    if stripped.startswith("<create>"):
+        match = CREATE_RE.fullmatch(stripped)
         if match is None:
-            return ParsedAction(action, "inspect", {}, False, "Inspect action must be a single complete <inspect> block.")
-        return _parse_inspect_payload(match.group(1), action, max_frame_index)
+            return ParsedAction(action, "create", {}, False, "Create action must be a single complete <create> block.")
+        return _parse_text_action_payload("create", match.group(1), action)
 
-    inspect_matches = INSPECT_RE.findall(stripped)
+    if stripped.startswith("<check>"):
+        match = CHECK_RE.fullmatch(stripped)
+        if match is None:
+            return ParsedAction(action, "check", {}, False, "Check action must be a single complete <check> block.")
+        return _parse_text_action_payload("check", match.group(1), action)
+
+    if stripped.startswith("<use_skill>"):
+        match = USE_SKILL_RE.fullmatch(stripped)
+        if match is None:
+            return ParsedAction(action, "use_skill", {}, False, "Use_skill action must be a single complete <use_skill> block.")
+        return _parse_text_action_payload("use_skill", match.group(1), action)
+
+    create_matches = CREATE_RE.findall(stripped)
+    check_matches = CHECK_RE.findall(stripped)
+    use_skill_matches = USE_SKILL_RE.findall(stripped)
     verdict_matches = VERDICT_RE.findall(stripped)
-    if inspect_matches and verdict_matches:
+    non_verdict_count = len(create_matches) + len(check_matches) + len(use_skill_matches)
+    if verdict_matches and non_verdict_count:
         return ParsedAction(
             raw_action=action,
             action_type="invalid",
             payload={},
             is_valid=False,
-            error="Cannot mix inspect and verdict actions.",
+            error="Cannot mix intermediate actions and verdict actions.",
         )
     return ParsedAction(
         raw_action=action,
         action_type="invalid",
         payload={},
         is_valid=False,
-        error="Exactly one inspect or verdict block is required.",
+        error="Exactly one create, check, use_skill, or verdict block is required.",
     )

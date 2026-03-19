@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a standalone SkillRL-style fake news detection project that can:
+Build a standalone SkillRL-style short-video credibility assessment project that can:
 
 - normalize raw datasets into a common schema,
 - run a multi-step verification environment,
@@ -14,7 +14,12 @@ Build a standalone SkillRL-style fake news detection project that can:
 - Standalone package structure created under `fake-news-skillrl/`.
 - Environment, prompting, parser, skill memory, rollout trainer, and evaluation scripts implemented.
 - Qwen VL model path added with automatic CUDA usage when available.
-- Repeated inspection now incurs an invalid-action penalty.
+- The environment now provides the full case package up front instead of making the agent inspect evidence item by item.
+- The action protocol was redesigned around reasoning-control steps:
+  - `<create>...</create>`
+  - `<check>...</check>`
+  - `<use_skill>...</use_skill>`
+  - final `<verdict>...</verdict>`
 - Fakett raw dataset adapter added:
   - reads `samples.jsonl`,
   - links rows to `[video_id].mp4`,
@@ -23,31 +28,32 @@ Build a standalone SkillRL-style fake news detection project that can:
   - misleading or non-factual content should be flagged,
   - playful exaggeration or metaphor can pass when it is not making a concrete misleading factual claim.
 - `gold_evidence` is now optional for current Fakett normalization and is not injected by default.
-- Parser hardened to treat malformed verdicts as verdict failures instead of misclassifying embedded inspect tags.
+- Parser hardened to treat malformed verdicts as verdict failures instead of misclassifying embedded action-like text.
 - Real-dataset metadata bias reduced by changing Fakett `task_type` from `misleading_caption` to `unknown`.
 - Frame sampling improved to prefer non-blank mid-video frames and sample more frames by default.
+- The Qwen VL message builder now tries to attach all available frame images directly to the prompt instead of gating them behind inspect actions.
 
 ## Current Known Issues
 
-- Qwen VL still shows a tendency to loop or overpredict `fake` on small zero-shot runs.
-- Evidence scoring is still weak for Fakett because `gold_evidence` is only lightly derived from `event` and `description`.
-- Evidence scoring for Fakett is currently minimal because `gold_evidence` may be absent by design.
+- Qwen VL still shows a tendency to loop or avoid reaching a verdict on small zero-shot runs.
+- Evidence scoring for Fakett is currently minimal because `gold_evidence` is absent by design.
 - VL quality depends heavily on actual extracted frames being present and informative.
 - The project still uses a lightweight rollout/training scaffold rather than full `verl` integration.
 
 ## Recommended Next Moves
 
-1. Regenerate normalized Fakett data with improved frame sampling on the server.
-2. Re-run Qwen VL evaluation on the regenerated normalized file.
-3. Inspect traces for:
-   - invalid verdict formatting,
-   - repeated invalid loops,
-   - overuse of metadata vs visual evidence.
-4. If the model still struggles zero-shot:
+1. Re-run Qwen VL evaluation with the new `create/check/use_skill/verdict` protocol on regenerated Fakett samples.
+2. Inspect whether frame images are actually being attached and used by the model on the server.
+3. Review traces for:
+   - malformed verdicts,
+   - action loops,
+   - overreliance on metadata,
+   - confusion between misleading factual claims and harmless exaggeration.
+4. If zero-shot behavior is still weak:
    - generate SFT trajectories from the real normalized data,
-   - fine-tune on the action protocol,
+   - fine-tune on the new action protocol,
    - then re-run evaluation.
-5. Consider integrating `verl` once the task formatting and reward behavior are stable.
+5. Consider `verl` integration once the task framing and action behavior are stable.
 
 ## Notes For Future Work
 
