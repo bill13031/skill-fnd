@@ -53,3 +53,13 @@ def test_explain_parse_failure_reports_reason():
     )
     reason = QwenVLAgent._explain_parse_failure("I think this is fake", sample)
     assert "Exactly one create, check, use_skill, or verdict block is required." in reason
+
+
+def test_extract_first_complete_block_from_multi_action_output():
+    text = (
+        "<create>State the main claim.</create>\n\n"
+        "<check>Compare the caption with the frames.</check>\n\n"
+        '<verdict>{"label":"fake","rationale":"caption overclaims"}</verdict>'
+    )
+    first_block = QwenVLAgent._extract_first_complete_block(text)
+    assert first_block == "<create>State the main claim.</create>"

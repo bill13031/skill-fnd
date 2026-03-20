@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Sequence
 
 from .parser import parse_action
 from .schema import FakeNewsSample, FrameRecord
+from .parser import CREATE_RE, CHECK_RE, USE_SKILL_RE, VERDICT_RE
 
 
 DEFAULT_QWEN_VL_MODEL = "Qwen/Qwen3.5-2B"
@@ -242,8 +243,14 @@ class QwenVLAgent(BaseFakeNewsAgent):
 
     @staticmethod
     def _extract_first_action(text: str, sample: FakeNewsSample) -> str | None:
-        candidates: Sequence[str] = text.splitlines() if "\n" in text else [text]
         max_frame_index = max(0, len(sample.frames) - 1)
+        first_complete_block = QwenVLAgent._extract_first_complete_block(text)
+        if first_complete_block is not None:
+            parsed = parse_action(first_complete_block, max_frame_index=max_frame_index)
+            if parsed.is_valid:
+                return first_complete_block
+
+        candidates: Sequence[str] = text.splitlines() if "\n" in text else [text]
         for candidate in candidates:
             candidate = candidate.strip().replace("<|im_end|>", "").strip()
             if not candidate:
@@ -258,9 +265,34 @@ class QwenVLAgent(BaseFakeNewsAgent):
         return None
 
     @staticmethod
+    def _extract_first_complete_block(text: str) -> str | None:
+        cleaned = text.strip().replace("<|im_end|>", "").strip()
+        if not cleaned:
+            return None
+        matches: List[tuple[int, str]] = []
+        for pattern in (CREATE_RE, CHECK_RE, USE_SKILL_RE, VERDICT_RE):
+            match = pattern.search(cleaned)
+            if match is not None:
+                matches.append((match.start(), match.group(0).strip()))
+        if not matches:
+            return None
+        matches.sort(key=lambda item: item[0])
+        return matches[0][1]
+
+    @staticmethod
     def _explain_parse_failure(text: str, sample: FakeNewsSample) -> str:
         candidates: Sequence[str] = text.splitlines() if "\n" in text else [text]
         max_frame_index = max(0, len(sample.frames) - 1)
+        cleaned = text.strip().replace("<|im_end|>", "").strip()
+        opening_tag_count = sum(cleaned.lower().count(tag) for tag in ("<create>", "<check>", "<use_skill>", "<verdict>"))
+        if opening_tag_count > 1:
+            first_complete_block = QwenVLAgent._extract_first_complete_block(cleaned)
+            if first_complete_block is not None:
+                return (
+                    "model_output_contains_multiple_action_blocks_in_one_turn; "
+                    f"first_complete_block={first_complete_block[:200]}"
+                )
+            return "model_output_contains_multiple_action_blocks_in_one_turn"
         candidate_errors: List[str] = []
         for candidate in candidates:
             cleaned = candidate.strip().replace("<|im_end|>", "").strip()
