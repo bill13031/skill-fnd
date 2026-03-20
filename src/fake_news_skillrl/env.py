@@ -16,7 +16,6 @@ class FakeNewsEnvConfig:
     invalid_action_penalty: float = -0.2
     correct_label_reward: float = 1.0
     wrong_label_penalty: float = -1.0
-    evidence_match_reward: float = 0.2
 
 
 @dataclass(slots=True)
@@ -79,22 +78,16 @@ class FakeNewsEnv:
         results: List[Dict[str, Any]] = []
         for state in self._states:
             label_correct = False
-            evidence_match_rate = 0.0
             predicted_label = None
             if state.final_verdict is not None:
                 predicted_label = state.final_verdict["label"]
                 label_correct = predicted_label == state.sample.label
-                evidence_match_rate = self._evidence_match_rate(
-                    state.final_verdict.get("evidence", []),
-                    state.sample.gold_evidence,
-                )
             results.append(
                 {
                     "sample_id": state.sample.sample_id,
                     "predicted_label": predicted_label,
                     "gold_label": state.sample.label,
                     "label_correct": label_correct,
-                    "evidence_match_rate": evidence_match_rate,
                     "invalid_action_count": state.invalid_action_count,
                     "won": label_correct,
                 }
@@ -148,41 +141,20 @@ class FakeNewsEnv:
         return reward, {
             "is_action_valid": True,
             "predicted_label": parsed.payload["label"],
-            "evidence_match_rate": self._evidence_match_rate(parsed.payload.get("evidence", []), state.sample.gold_evidence),
             "won": parsed.payload["label"] == state.sample.label,
         }
 
     def _score_verdict(self, state: EpisodeState) -> float:
         assert state.final_verdict is not None
         label = state.final_verdict["label"]
-        reward = self.config.correct_label_reward if label == state.sample.label else self.config.wrong_label_penalty
-        reward += self.config.evidence_match_reward * self._evidence_match_rate(
-            state.final_verdict.get("evidence", []),
-            state.sample.gold_evidence,
-        )
-        return reward
+        return self.config.correct_label_reward if label == state.sample.label else self.config.wrong_label_penalty
 
     def _default_visible_evidence(self, sample: FakeNewsSample) -> List[str]:
         evidence = [
             f"[post_text]\n{sample.post_text}",
             f"[transcript]\n{sample.transcript or '[not available]'}",
             f"[ocr_text]\n{sample.ocr_text or '[not available]'}",
-            f"[metadata]\n{sample.metadata}",
         ]
-        for index, frame in enumerate(sample.frames):
-            evidence.append(f"[frame:{index}]\npath={frame.path}\ndescription={frame.description}")
+        if sample.frames:
+            evidence.append(f"[attached_frames]\n{len(sample.frames)} frame image(s) are attached directly to the model input.")
         return evidence
-
-    @staticmethod
-    def _evidence_match_rate(predicted_evidence: Sequence[str], gold_evidence: Sequence[str]) -> float:
-        if not gold_evidence:
-            return 0.0
-        if not predicted_evidence:
-            return 0.0
-        normalized_gold = [item.lower() for item in gold_evidence]
-        hits = 0
-        for predicted in predicted_evidence:
-            text = predicted.lower()
-            if any(gold in text or text in gold for gold in normalized_gold):
-                hits += 1
-        return hits / max(1, len(gold_evidence))

@@ -16,7 +16,7 @@ def test_build_messages_attaches_images_only_on_first_step():
         post_text="post",
         transcript="",
         ocr_text="",
-        metadata={"task_type": "unknown"},
+        metadata={},
         frames=[FrameRecord(frame_id="0", path="https://example.com/frame.jpg", description="frame desc")],
         label="real",
         gold_evidence=[],
@@ -31,6 +31,25 @@ def test_build_messages_attaches_images_only_on_first_step():
 
     first_types = [part["type"] for part in first_step_messages[0]["content"]]
     later_types = [part["type"] for part in later_step_messages[0]["content"]]
+    later_text = " ".join(part["text"] for part in later_step_messages[0]["content"] if part["type"] == "text")
 
     assert "image" in first_types
     assert "image" not in later_types
+    assert "frame desc" not in later_text
+
+
+def test_explain_parse_failure_reports_reason():
+    sample = FakeNewsSample(
+        sample_id="sample-1",
+        post_text="post",
+        transcript="",
+        ocr_text="",
+        metadata={},
+        frames=[],
+        label="real",
+        gold_evidence=[],
+        split="train",
+        data_source="test",
+    )
+    reason = QwenVLAgent._explain_parse_failure("I think this is fake", sample)
+    assert "Exactly one create, check, use_skill, or verdict block is required." in reason

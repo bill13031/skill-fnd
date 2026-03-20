@@ -17,6 +17,7 @@ def test_sft_builder_and_rollout_trainer_end_to_end():
     assert "metrics" in results
     assert "label_accuracy" in results["metrics"]
     assert "unverified_f1" not in results["metrics"]
+    assert "evidence_match_rate" not in results["metrics"]
     assert len(results["success"]) == len(samples)
     assert results["traces"][0]["observations"]
     assert results["traces"][0]["agent_debug"]

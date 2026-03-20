@@ -154,11 +154,10 @@ def normalize_fakett_file(
                     "user_description": str(row.get("user_description", "")),
                     "user_certify": row.get("user_certify", 0),
                     "publish_time": row.get("publish_time"),
-                    "task_type": "unknown",
                     "frame_extraction_status": "available" if frames else "missing_or_unavailable",
                 },
                 "frames": frames,
-                "label": str(row.get("annotation", "unverified")).lower(),
+                "label": str(row.get("annotation", "real")).lower(),
                 "split": infer_split(index, total),
                 "data_source": "fakett",
             }

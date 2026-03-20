@@ -27,17 +27,17 @@ Build a standalone SkillRL-style short-video credibility assessment project that
 - Task framing updated from generic fake-news detection to short-video credibility assessment:
   - misleading or non-factual content should be flagged,
   - playful exaggeration or metaphor can pass when it is not making a concrete misleading factual claim.
-- `gold_evidence` is now optional for current Fakett normalization and is not injected by default.
+- Verdicts are now fake/real only with a short rationale, without an evidence list.
 - Parser hardened to treat malformed verdicts as verdict failures instead of misclassifying embedded action-like text.
 - Real-dataset metadata bias reduced by changing Fakett `task_type` from `misleading_caption` to `unknown`.
 - Frame sampling improved to prefer non-blank mid-video frames and sample more frames by default.
 - The Qwen VL message builder now tries to attach all available frame images directly to the prompt instead of gating them behind inspect actions.
 - VL evaluation now defaults to attaching frames only on the first reasoning step and can force a fallback verdict after a small reasoning budget.
+- The model-facing prompt now hides metadata, frame descriptions, and task-type hints to reduce shortcut bias.
 
 ## Current Known Issues
 
 - Qwen VL still shows a tendency to loop or avoid reaching a verdict on small zero-shot runs.
-- Evidence scoring for Fakett is currently minimal because `gold_evidence` is absent by design.
 - VL quality depends heavily on actual extracted frames being present and informative.
 - The rollout is still sequential and can be slow on large normalized files even with the new runtime controls.
 - The project still uses a lightweight rollout/training scaffold rather than full `verl` integration.
@@ -49,7 +49,6 @@ Build a standalone SkillRL-style short-video credibility assessment project that
 3. Review traces for:
    - malformed verdicts,
    - action loops,
-   - overreliance on metadata,
    - confusion between misleading factual claims and harmless exaggeration.
 4. If zero-shot behavior is still weak:
    - generate SFT trajectories from the real normalized data,

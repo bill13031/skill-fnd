@@ -9,20 +9,20 @@
     {
       "skill_id": "gen_002",
       "title": "Cross-check modalities",
-      "principle": "Compare post text, transcript, OCR, and frame descriptions for consistency.",
-      "when_to_apply": "When a post includes both text and video evidence."
+      "principle": "Compare post text, transcript, OCR, and attached frames for consistency.",
+      "when_to_apply": "When a post includes both text and video inputs."
     },
     {
       "skill_id": "gen_003",
-      "title": "Prefer specific evidence",
-      "principle": "Base the verdict on explicit statements, dates, labels, and visible context rather than vibe-based guesses.",
+      "title": "Judge the post impression",
+      "principle": "Base the verdict on whether the post creates a misleading factual impression, not on isolated suspicious words alone.",
       "when_to_apply": "Before writing the final verdict."
     },
     {
       "skill_id": "gen_004",
-      "title": "Handle uncertainty honestly",
-      "principle": "If the provided evidence is insufficient, prefer an unverified verdict over overclaiming.",
-      "when_to_apply": "When evidence is incomplete or ambiguous."
+      "title": "Avoid metadata shortcuts",
+      "principle": "Do not rely on hidden task labels, profile vibes, or source metadata shortcuts when deciding fake versus real.",
+      "when_to_apply": "Whenever extra metadata could bias the judgment."
     }
   ],
   "task_specific_skills": {
@@ -37,8 +37,8 @@
     "misleading_caption": [
       {
         "skill_id": "mc_001",
-        "title": "Separate caption from evidence",
-        "principle": "Treat the caption as a claim to verify, not as evidence by itself.",
+        "title": "Separate caption from reality",
+        "principle": "Treat the caption as the main claim being judged, not as proof that the claim is true.",
         "when_to_apply": "When the post caption makes a strong assertion."
       }
     ],
@@ -46,16 +46,16 @@
       {
         "skill_id": "oc_001",
         "title": "Verify time cues",
-        "principle": "Search transcript, OCR, and frame descriptions for timestamps, archive labels, or signs that the video predates the claimed event.",
+        "principle": "Check transcript, OCR, and attached frames for timestamps, archive labels, or signs that the video predates the claimed event.",
         "when_to_apply": "When the post says the clip is recent or tied to a current event."
       }
     ],
     "source_credibility": [
       {
         "skill_id": "sc_001",
-        "title": "Inspect source signals",
-        "principle": "Use metadata such as author, platform context, and official language in transcript/OCR to assess whether the source looks authoritative.",
-        "when_to_apply": "When authenticity depends on who is publishing the post."
+        "title": "Inspect visible source signals",
+        "principle": "Use source claims that are explicitly visible in the post text, transcript, OCR, or frames rather than hidden metadata shortcuts.",
+        "when_to_apply": "When authenticity depends on who the post claims is speaking or publishing."
       }
     ],
     "temporal_inconsistency": [
@@ -70,9 +70,9 @@
   "common_mistakes": [
     {
       "mistake_id": "err_001",
-      "description": "Calling a post fake without citing concrete evidence.",
-      "why_it_happens": "The model reacts to suspicious tone instead of grounded details.",
-      "how_to_avoid": "Quote specific transcript, OCR, or frame clues in the verdict evidence list."
+      "description": "Calling a post fake just because it sounds dramatic.",
+      "why_it_happens": "The model reacts to suspicious tone instead of the overall misleading factual impression.",
+      "how_to_avoid": "Judge whether the post actually presents a concrete misleading claim as true."
     },
     {
       "mistake_id": "err_002",
@@ -84,7 +84,7 @@
       "mistake_id": "err_003",
       "description": "Ignoring archive or timestamp markers.",
       "why_it_happens": "Temporal clues are often small and easy to miss.",
-      "how_to_avoid": "Inspect OCR and frame descriptions before issuing a verdict."
+      "how_to_avoid": "Inspect OCR and attached frames before issuing a verdict."
     }
   ]
 }

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal
 
 
-Label = Literal["fake", "real", "unverified"]
+Label = Literal["fake", "real"]
 
 
 @dataclass(slots=True)
@@ -36,17 +36,11 @@ class FakeNewsSample:
     data_source: str
 
     @property
-    def task_type(self) -> str:
-        task_type = self.metadata.get("task_type", "unknown")
-        return str(task_type)
-
-    @property
     def task_description(self) -> str:
         return (
             "Review a short social-media video post and decide whether it contains misleading or non-factual content. "
             "Allow clearly playful, metaphorical, or exaggerated content to pass if it is not making a concrete misleading factual claim. "
-            f"Post text: {self.post_text.strip()} "
-            f"Task type hint: {self.task_type.replace('_', ' ')}."
+            f"Post text: {self.post_text.strip()}"
         )
 
 
@@ -81,7 +75,7 @@ def normalize_sample(raw: Dict[str, Any]) -> FakeNewsSample:
     ]
 
     label = str(raw["label"]).lower()
-    if label not in {"fake", "real", "unverified"}:
+    if label not in {"fake", "real"}:
         raise ValueError(f"Unsupported label: {label}")
 
     return FakeNewsSample(

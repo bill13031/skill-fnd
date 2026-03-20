@@ -10,11 +10,11 @@
 The current version focuses on a practical local pipeline:
 
 - normalize short-video samples into a common schema,
-- run a short investigative episode over caption text, transcript/OCR if available, metadata, and sampled video frames,
+- run a short investigative episode over caption text, transcript/OCR if available, and sampled video frames,
 - finish with a structured verdict:
 
 ```xml
-<verdict>{"label":"fake","rationale":"...","evidence":["..."]}</verdict>
+<verdict>{"label":"fake","rationale":"..."}</verdict>
 ```
 
 ## Project Layout
@@ -45,8 +45,6 @@ Each sample is normalized into a single record with the following keys:
 - `split`
 - `data_source`
 
-`gold_evidence` is optional and is currently not injected for Fakett-style data.
-
 `frames` is a list of extracted frame descriptors. In v1, this is frame-first rather than native video tensor input.
 
 ### Task Framing
@@ -55,8 +53,6 @@ The agent should behave like a short-video content credibility analyst, not a ge
 
 - `fake` means the post contains misleading or non-factual content presented as true or documentary.
 - `real` means the post is factual, benign, or expressive without making a misleading factual claim.
-- `unverified` means the provided evidence is insufficient.
-
 Harmless exaggeration, metaphor, humor, or expressive social-video language should be allowed to pass when it is not making a concrete misleading factual claim.
 
 ### Action Protocol
@@ -72,7 +68,7 @@ Intermediate actions are:
 The episode ends with:
 
 ```xml
-<verdict>{"label":"fake|real|unverified","rationale":"...","evidence":["..."]}</verdict>
+<verdict>{"label":"fake|real","rationale":"..."}</verdict>
 ```
 
 ### Skill Bank
@@ -110,8 +106,7 @@ python3 scripts/prepare_dataset.py \
 Notes:
 
 - If OpenCV is unavailable or frame extraction fails, the normalized rows will still be written, but `frames` may be empty and `metadata.frame_extraction_status` will indicate that.
-- Fakett normalization keeps `task_type` neutral as `unknown`.
-- Fakett normalization does not currently inject `gold_evidence`.
+- Fakett normalization currently keeps extra metadata for storage, but the model-facing prompt does not expose metadata or frame descriptions.
 
 Generate SFT trajectories:
 
@@ -157,7 +152,7 @@ Runtime notes:
 
 - Evaluation with a VL model is sequential in this standalone project, so reducing `--max-new-tokens` and `--max-samples` is often the fastest way to iterate.
 - `--attach-frames-first-step-only` is enabled by default and prevents re-sending every frame image on later reasoning steps.
-- `--max-reasoning-steps-before-forced-verdict` keeps the rollout from spending too many generations on intermediate actions before emitting a fallback verdict.
+- `--max-reasoning-steps-before-forced-verdict` keeps the rollout from spending too many generations on intermediate actions before emitting a forced fallback verdict.
 
 ## Current Scope
 
@@ -165,8 +160,8 @@ This project is fully runnable and testable, but the model-training layer is int
 
 - SFT data generation is implemented.
 - RL-style episodic rollout, reward computation, and evaluation are implemented.
-- The agent/model interface is modular and now includes a Qwen VL-backed path using `AutoProcessor` and `AutoModelForImageTextToText`, while the heuristic fallback keeps the smoke workflow runnable.
-- For Fakett-style data, evidence scoring is currently diagnostic only because no gold evidence annotations are provided.
+- The agent/model interface is modular and now includes a Qwen VL-backed path using `AutoProcessor` and `AutoModelForImageTextToText`.
+- The model-facing prompt is intentionally simplified: no metadata, no frame descriptions, and no evidence-list supervision.
 
 ## Future Extensions
 

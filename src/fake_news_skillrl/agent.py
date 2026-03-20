@@ -48,7 +48,7 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         if "create" not in action_kinds:
             action = "<create>Break the post into its main factual claim and any credibility risks.</create>"
         elif "check" not in action_kinds:
-            action = "<check>Compare the caption, metadata, and visible frames for support or contradiction of the main claim.</check>"
+            action = "<check>Compare the caption, transcript, OCR, and attached frames for support or contradiction of the main claim.</check>"
         elif "use_skill" not in action_kinds:
             action = "<use_skill>Apply the most relevant credibility skill: separate expressive exaggeration from concrete misleading factual claims.</use_skill>"
         else:
@@ -65,12 +65,10 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         return action
 
     def _verdict_action(self, sample: FakeNewsSample) -> str:
-        evidence = list(sample.gold_evidence[:3])
         rationale = self._build_rationale(sample)
         payload = {
             "label": self._predict_label(sample),
             "rationale": rationale,
-            "evidence": evidence,
         }
         return f"<verdict>{json.dumps(payload, ensure_ascii=True)}</verdict>"
 
@@ -80,7 +78,6 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
                 sample.post_text.lower(),
                 sample.transcript.lower(),
                 sample.ocr_text.lower(),
-                " ".join(frame.description.lower() for frame in sample.frames),
             ]
         )
         suspicious_patterns = [
@@ -108,10 +105,8 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
     def _build_rationale(self, sample: FakeNewsSample) -> str:
         label = self._predict_label(sample)
         if label == "fake":
-            return "The post contains unsupported or contradictory cues across text, transcript, OCR, or frame context."
-        if label == "real":
-            return "The available text, metadata, and frame evidence are internally consistent and source signals look credible."
-        return "The available evidence does not show a concrete misleading factual claim."
+            return "The post makes a misleading or non-factual claim when judged against the provided post information and frames."
+        return "The post does not present a concrete misleading factual claim in the provided post information and frames."
 
     def get_last_debug(self) -> Dict[str, Any]:
         return dict(self.last_debug)
@@ -124,6 +119,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
     temperature: float = 0.0
     trust_remote_code: bool = False
     attach_frames_first_step_only: bool = True
+    allow_heuristic_fallback: bool = False
     last_debug: Dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -165,6 +161,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
             "selected_action": None,
             "fallback_used": False,
             "fallback_reason": None,
+            "parse_failure_reason": None,
         }
         inputs = self._processor.apply_chat_template(
             messages,
@@ -187,13 +184,19 @@ class QwenVLAgent(BaseFakeNewsAgent):
         self.last_debug["raw_output"] = generated
         action = self._extract_first_action(generated, sample)
         if action is None:
-            fallback = HeuristicFakeNewsAgent()
-            fallback_action = fallback.next_action(sample, inspected_items, observation)
-            self.last_debug["selected_action"] = fallback_action
-            self.last_debug["fallback_used"] = True
-            self.last_debug["fallback_reason"] = "model_output_did_not_parse_to_a_valid_action"
-            self.last_debug["fallback_debug"] = fallback.get_last_debug()
-            return fallback_action
+            parse_failure_reason = self._explain_parse_failure(generated, sample)
+            invalid_action = generated.strip().replace("<|im_end|>", "").strip()
+            self.last_debug["selected_action"] = invalid_action
+            self.last_debug["parse_failure_reason"] = parse_failure_reason
+            if self.allow_heuristic_fallback:
+                fallback = HeuristicFakeNewsAgent()
+                fallback_action = fallback.next_action(sample, inspected_items, observation)
+                self.last_debug["selected_action"] = fallback_action
+                self.last_debug["fallback_used"] = True
+                self.last_debug["fallback_reason"] = "model_output_did_not_parse_to_a_valid_action"
+                self.last_debug["fallback_debug"] = fallback.get_last_debug()
+                return fallback_action
+            return invalid_action
         self.last_debug["selected_action"] = action
         return action
 
@@ -209,7 +212,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
                 "text": (
                     f"{observation}\n"
                     "Respond with exactly one valid action block and no extra commentary.\n"
-                    "All evidence is already available in the case package.\n"
+                    "All provided inputs are already available in the case.\n"
                     "Use create, check, use_skill, and verdict actions only.\n"
                 ),
             }
@@ -221,13 +224,6 @@ class QwenVLAgent(BaseFakeNewsAgent):
                 image_part = self._frame_to_content_part(frame)
                 if image_part is not None:
                     content.append(image_part)
-            if frame.description:
-                content.append(
-                    {
-                        "type": "text",
-                        "text": f"Frame {frame.frame_id} description: {frame.description}",
-                    }
-                )
 
         return [{"role": "user", "content": content}]
 
@@ -259,6 +255,28 @@ class QwenVLAgent(BaseFakeNewsAgent):
             return stripped
         return None
 
+    @staticmethod
+    def _explain_parse_failure(text: str, sample: FakeNewsSample) -> str:
+        candidates: Sequence[str] = text.splitlines() if "\n" in text else [text]
+        max_frame_index = max(0, len(sample.frames) - 1)
+        candidate_errors: List[str] = []
+        for candidate in candidates:
+            cleaned = candidate.strip().replace("<|im_end|>", "").strip()
+            if not cleaned:
+                continue
+            parsed = parse_action(cleaned, max_frame_index=max_frame_index)
+            if parsed.is_valid:
+                return "unexpected_parse_success"
+            candidate_errors.append(f"{cleaned[:120]} -> {parsed.error}")
+        stripped = text.strip().replace("<|im_end|>", "").strip()
+        if stripped:
+            parsed = parse_action(stripped, max_frame_index=max_frame_index)
+            if parsed.error:
+                candidate_errors.append(f"full_output -> {parsed.error}")
+        if candidate_errors:
+            return " | ".join(candidate_errors[:5])
+        return "model_output_was_empty_after_cleanup"
+
     def get_last_debug(self) -> Dict[str, Any]:
         return dict(self.last_debug)
 
@@ -270,6 +288,7 @@ def build_agent(
     temperature: float = 0.0,
     trust_remote_code: bool = False,
     attach_frames_first_step_only: bool = True,
+    allow_heuristic_fallback: bool = False,
 ) -> BaseFakeNewsAgent:
     if agent_type == "heuristic":
         return HeuristicFakeNewsAgent(model_name=model_name or "heuristic-v1")
@@ -280,5 +299,6 @@ def build_agent(
             temperature=temperature,
             trust_remote_code=trust_remote_code,
             attach_frames_first_step_only=attach_frames_first_step_only,
+            allow_heuristic_fallback=allow_heuristic_fallback,
         )
     raise ValueError(f"Unsupported agent type: {agent_type}")
