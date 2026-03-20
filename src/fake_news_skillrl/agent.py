@@ -14,6 +14,7 @@ from .parser import CREATE_RE, CHECK_RE, USE_SKILL_RE, VERDICT_RE
 
 DEFAULT_QWEN_VL_MODEL = "Qwen/Qwen3.5-2B"
 CURRENT_STAGE_RE = re.compile(r"## Current Stage\n([a-z_]+)", re.IGNORECASE)
+CURRENT_ROLE_RE = re.compile(r"## Current Role\n([a-z_]+)", re.IGNORECASE)
 
 
 def select_inference_device(cuda_available: bool) -> str:
@@ -48,14 +49,14 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         observation: str,
     ) -> str:
         current_stage = self._detect_stage(observation)
-        if current_stage == "visual_understanding":
-            action = "The frames show stylized or ambiguous imagery rather than verified documentary footage."
-        elif current_stage == "claim_extraction":
-            action = "The post claims a concrete real-world event happened as shown in the video."
-        elif current_stage == "consistency_check":
-            action = "The provided visuals do not clearly verify the specific factual claim made by the post."
-        elif current_stage == "skill_application":
-            action = "Apply the principle that extraordinary factual claims need clear support from the provided visuals."
+        if current_stage == "analyzer_report":
+            action = (
+                "Visual: The frames show stylized or ambiguous imagery rather than verified documentary footage.\n"
+                "Claim: The post claims a concrete real-world event happened as shown in the video.\n"
+                "Need: Need a skill for judging whether themed imagery actually verifies an extraordinary factual claim."
+            )
+        elif current_stage == "worker_skill":
+            action = "Skill: Topic-matched or stylized imagery does not verify an extraordinary real-world claim without documentary support."
         else:
             action = self._verdict_action(sample)
         self.last_debug = {
@@ -110,7 +111,7 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
     def _build_rationale(self, sample: FakeNewsSample) -> str:
         label = self._predict_label(sample)
         if label == "fake":
-            return "The post makes a misleading or non-factual claim when judged against the provided post information and frames."
+            return "The post makes an unsupported extraordinary factual claim that is not credibly verified by the provided inputs."
         return "The post does not present a concrete misleading factual claim in the provided post information and frames."
 
     def get_last_debug(self) -> Dict[str, Any]:
@@ -121,6 +122,13 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         match = CURRENT_STAGE_RE.search(observation)
         if match is None:
             return "verdict"
+        return match.group(1).strip().lower()
+
+    @staticmethod
+    def _detect_role(observation: str) -> str:
+        match = CURRENT_ROLE_RE.search(observation)
+        if match is None:
+            return "analyzer"
         return match.group(1).strip().lower()
 
 
@@ -164,7 +172,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
         observation: str,
     ) -> str:
         current_stage = HeuristicFakeNewsAgent._detect_stage(observation)
-        messages = self._build_messages(sample, observation, inspected_items)
+        messages = self._build_messages(sample, observation, inspected_items, current_stage)
         self.last_debug = {
             "agent_type": "qwen_vl",
             "model_name": self.model_name,
@@ -220,15 +228,24 @@ class QwenVLAgent(BaseFakeNewsAgent):
         sample: FakeNewsSample,
         observation: str,
         inspected_items: List[str],
+        current_stage: str = "analyzer_report",
     ) -> List[dict]:
+        if current_stage == "verdict":
+            response_rule = (
+                "Return exactly one <verdict>{\"label\":\"fake|real\",\"rationale\":\"...\"}</verdict> block and nothing else.\n"
+            )
+        else:
+            response_rule = (
+                "Return only the requested stage output as plain text.\n"
+                "Do not wrap it in XML unless the stage explicitly asks for a verdict block.\n"
+            )
         content: List[dict] = [
             {
                 "type": "text",
                 "text": (
                     f"{observation}\n"
-                    "Respond with exactly one valid action block and no extra commentary.\n"
+                    f"{response_rule}"
                     "All provided inputs are already available in the case.\n"
-                    "Use visual_understanding, create, check, use_skill, and verdict actions only.\n"
                 ),
             }
         ]

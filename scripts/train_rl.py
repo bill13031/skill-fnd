@@ -36,8 +36,8 @@ def main() -> None:
     parser.add_argument(
         "--max-reasoning-steps-before-forced-verdict",
         type=int,
-        default=4,
-        help="Force a heuristic fallback verdict after this many valid reasoning steps if the agent still has not produced one.",
+        default=2,
+        help="At verdict stage, force a heuristic fallback verdict after this many completed collaboration steps if the agent still has not produced one.",
     )
     parser.add_argument("--trust-remote-code", action="store_true")
     args = parser.parse_args()
@@ -56,7 +56,8 @@ def main() -> None:
     )
     trainer = RolloutTrainer(
         env=env,
-        agent=agent,
+        analyzer_agent=agent,
+        worker_agent=agent,
         max_reasoning_steps_before_forced_verdict=args.max_reasoning_steps_before_forced_verdict,
     )
     results = trainer.run(samples)

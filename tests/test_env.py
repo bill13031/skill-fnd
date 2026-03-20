@@ -4,29 +4,32 @@ from fake_news_skillrl.env import FakeNewsEnv, FakeNewsEnvConfig
 
 def test_env_rollout_with_manual_actions():
     sample = load_normalized_samples("data/raw/smoke_samples.jsonl")[0]
-    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=5))
+    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=3))
     observations = env.reset([sample])
-    assert "## Current Stage\nvisual_understanding" in observations[0]
+    assert "## Current Stage\nanalyzer_report" in observations[0]
+    assert "## Current Role\nanalyzer" in observations[0]
 
-    _, rewards, dones, infos = env.step(["Describe what is visible in the frames."])
+    _, rewards, dones, infos = env.step(
+        [
+            "Visual: The frames show an exaggerated promotional montage.\n"
+            "Claim: The post claims a miracle herb cures every virus in 24 hours.\n"
+            "Need: Need a skill for judging unsupported extraordinary cure claims."
+        ]
+    )
     assert rewards[0] == 0.0
     assert not dones[0]
     assert infos[0]["is_action_valid"]
+    assert infos[0]["role"] == "analyzer"
 
-    _, rewards, dones, infos = env.step(["State the main claim."])
+    _, rewards, dones, infos = env.step(
+        [
+            "Skill: Extraordinary cure claims need documentary support, not just dramatic promotional imagery."
+        ]
+    )
     assert rewards[0] == 0.0
     assert not dones[0]
     assert infos[0]["is_action_valid"]
-
-    _, rewards, dones, infos = env.step(["The visuals do not verify the cure claim."])
-    assert rewards[0] == 0.0
-    assert not dones[0]
-    assert infos[0]["is_action_valid"]
-
-    _, rewards, dones, infos = env.step(["Apply the principle that extraordinary medical claims need clear visual support."])
-    assert rewards[0] == 0.0
-    assert not dones[0]
-    assert infos[0]["is_action_valid"]
+    assert infos[0]["role"] == "worker"
 
     verdict = '<verdict>{"label":"fake","rationale":"unsupported absolute cure claim"}</verdict>'
     _, rewards, dones, infos = env.step([verdict])
@@ -34,24 +37,30 @@ def test_env_rollout_with_manual_actions():
     assert rewards[0] > 0.0
     assert infos[0]["won"]
 
+
 def test_intermediate_reasoning_action_is_recorded():
     sample = load_normalized_samples("data/raw/smoke_samples.jsonl")[0]
-    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=5))
+    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=3))
     env.reset([sample])
-    env.step(["Describe what is visible in the frames."])
-    env.step(["State the main claim."])
-    env.step(["The visuals do not verify the claim."])
-    _, rewards, dones, infos = env.step(["Apply source skepticism and cross-modal checking."])
+    env.step(
+        [
+            "Visual: Stylized imagery.\n"
+            "Claim: A concrete cure claim is made.\n"
+            "Need: Need a medical-claims verification skill."
+        ]
+    )
+    _, rewards, dones, infos = env.step(
+        ["Skill: Extraordinary medical claims need clear support from the provided inputs."]
+    )
     assert rewards[0] == 0.0
     assert not dones[0]
-    assert infos[0]["reasoning_action"] == "skill_application"
+    assert infos[0]["reasoning_action"] == "worker_skill"
 
 
 def test_repeated_or_out_of_order_action_is_penalized():
     sample = load_normalized_samples("data/raw/smoke_samples.jsonl")[0]
-    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=4))
+    env = FakeNewsEnv(FakeNewsEnvConfig(max_steps=3))
     env.reset([sample])
-    env.step(["Describe what is visible in the frames."])
     _, rewards, dones, infos = env.step(['<verdict>{"label":"fake","rationale":"too early"}</verdict>'])
     assert rewards[0] < 0.0
     assert not dones[0]

@@ -11,7 +11,11 @@ def test_sft_builder_and_rollout_trainer_end_to_end():
     assert len(sft_rows) == len(samples)
 
     memory = SkillsOnlyMemory("memory_data/fake_news/claude_style_skills.json")
-    trainer = RolloutTrainer(env=FakeNewsEnv(memory=memory), agent=HeuristicFakeNewsAgent())
+    trainer = RolloutTrainer(
+        env=FakeNewsEnv(memory=memory),
+        analyzer_agent=HeuristicFakeNewsAgent(model_name="heuristic-analyzer"),
+        worker_agent=HeuristicFakeNewsAgent(model_name="heuristic-worker"),
+    )
     results = trainer.run(samples)
 
     assert "metrics" in results
@@ -34,8 +38,12 @@ class _LoopingAgent:
     def next_action(self, sample, inspected_items, observation):
         del sample, observation
         if not inspected_items:
-            return "<visual_understanding>Describe the visible content only.</visual_understanding>"
-        return "<create>keep reasoning forever</create>"
+            return (
+                "Visual: Generic imagery.\n"
+                "Claim: A concrete claim is made.\n"
+                "Need: Need a verification skill."
+            )
+        return "still not a verdict"
 
 
 def test_rollout_trainer_forces_verdict_after_reasoning_limit():
@@ -43,10 +51,11 @@ def test_rollout_trainer_forces_verdict_after_reasoning_limit():
     memory = SkillsOnlyMemory("memory_data/fake_news/claude_style_skills.json")
     trainer = RolloutTrainer(
         env=FakeNewsEnv(memory=memory),
-        agent=_LoopingAgent(),
-        max_reasoning_steps_before_forced_verdict=1,
+        analyzer_agent=_LoopingAgent(),
+        worker_agent=_LoopingAgent(),
+        max_reasoning_steps_before_forced_verdict=2,
     )
     results = trainer.run(samples)
 
-    assert results["traces"][0]["actions"][0].startswith("<visual_understanding>")
-    assert results["traces"][0]["actions"][1].startswith("<verdict>")
+    assert results["traces"][0]["actions"][0].startswith("Visual:")
+    assert results["traces"][0]["actions"][2].startswith("<verdict>")

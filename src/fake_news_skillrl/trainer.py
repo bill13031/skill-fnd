@@ -21,38 +21,55 @@ class EpisodeTrace:
 
 
 class SFTDataBuilder:
-    def __init__(self, agent: BaseFakeNewsAgent | None = None) -> None:
-        self.agent = agent or HeuristicFakeNewsAgent()
+    def __init__(
+        self,
+        analyzer_agent: BaseFakeNewsAgent | None = None,
+        worker_agent: BaseFakeNewsAgent | None = None,
+    ) -> None:
+        self.analyzer_agent = analyzer_agent or HeuristicFakeNewsAgent(model_name="heuristic-analyzer")
+        self.worker_agent = worker_agent or HeuristicFakeNewsAgent(model_name="heuristic-worker")
 
     def build(self, samples: Iterable[FakeNewsSample]) -> List[Dict[str, object]]:
         rows: List[Dict[str, object]] = []
         for sample in samples:
-            completed_stages: List[str] = []
             stage_outputs: Dict[str, str] = {}
             trajectory: List[Dict[str, str]] = []
-            for step_index, stage in enumerate(["visual_understanding", "claim_extraction", "consistency_check", "skill_application"], start=1):
-                observation = build_stage_prompt(
-                    sample=sample,
-                    stage=stage,
-                    stage_outputs=stage_outputs,
-                    step_index=step_index,
-                    max_steps=5,
-                    skill_prompt="",
-                )
-                action = self.agent.next_action(sample, completed_stages, observation)
-                trajectory.append({"role": "assistant", "content": action})
-                stage_outputs[stage] = action
-                completed_stages.append(stage)
+
+            analyzer_observation = build_stage_prompt(
+                sample=sample,
+                stage="analyzer_report",
+                stage_outputs=stage_outputs,
+                step_index=1,
+                max_steps=3,
+                skill_prompt="",
+            ) + "\n## Current Role\nanalyzer\n"
+            analyzer_output = self.analyzer_agent.next_action(sample, [], analyzer_observation)
+            trajectory.append({"role": "assistant", "content": analyzer_output})
+            stage_outputs["analyzer_report"] = analyzer_output
+
+            worker_observation = build_stage_prompt(
+                sample=sample,
+                stage="worker_skill",
+                stage_outputs=stage_outputs,
+                step_index=2,
+                max_steps=3,
+                skill_prompt="",
+            ) + "\n## Current Role\nworker\n"
+            worker_output = self.worker_agent.next_action(sample, ["analyzer_report"], worker_observation)
+            trajectory.append({"role": "assistant", "content": worker_output})
+            stage_outputs["worker_skill"] = worker_output
+
             verdict_observation = build_stage_prompt(
                 sample=sample,
                 stage="verdict",
                 stage_outputs=stage_outputs,
-                step_index=5,
-                max_steps=5,
+                step_index=3,
+                max_steps=3,
                 skill_prompt="",
-            )
-            action = self.agent.next_action(sample, completed_stages, verdict_observation)
-            trajectory.append({"role": "assistant", "content": action})
+            ) + "\n## Current Role\nanalyzer\n"
+            verdict_output = self.analyzer_agent.next_action(sample, ["analyzer_report", "worker_skill"], verdict_observation)
+            trajectory.append({"role": "assistant", "content": verdict_output})
+
             rows.append(
                 {
                     "sample_id": sample.sample_id,
@@ -70,11 +87,13 @@ class RolloutTrainer:
     def __init__(
         self,
         env: FakeNewsEnv,
-        agent: BaseFakeNewsAgent | None = None,
-        max_reasoning_steps_before_forced_verdict: int = 4,
+        analyzer_agent: BaseFakeNewsAgent | None = None,
+        worker_agent: BaseFakeNewsAgent | None = None,
+        max_reasoning_steps_before_forced_verdict: int = 2,
     ) -> None:
         self.env = env
-        self.agent = agent or HeuristicFakeNewsAgent()
+        self.analyzer_agent = analyzer_agent or HeuristicFakeNewsAgent(model_name="heuristic-analyzer")
+        self.worker_agent = worker_agent or HeuristicFakeNewsAgent(model_name="heuristic-worker")
         self.max_reasoning_steps_before_forced_verdict = max_reasoning_steps_before_forced_verdict
         self._forced_verdict_agent = HeuristicFakeNewsAgent(model_name="forced-verdict")
 
@@ -89,15 +108,20 @@ class RolloutTrainer:
             current_observations = list(observations)
             actions: List[str] = []
             agent_debug_by_index: List[Dict[str, object]] = []
-            for is_active, sample, completed, observation in zip(active, samples, completed_stages, observations):
+            for index, (is_active, sample, completed, observation) in enumerate(zip(active, samples, completed_stages, observations)):
                 if not is_active:
-                    actions.append("<create>inactive</create>")
+                    actions.append("inactive")
                     agent_debug_by_index.append({})
                     continue
-                action = self.agent.next_action(sample, completed, observation)
-                agent_debug = getattr(self.agent, "get_last_debug", lambda: {})()
+
+                stage = self.env._current_stage(self.env._states[index])
+                agent = self.worker_agent if stage == "worker_skill" else self.analyzer_agent
+                action = agent.next_action(sample, completed, observation)
+                agent_debug = getattr(agent, "get_last_debug", lambda: {})()
+
                 if (
-                    self.max_reasoning_steps_before_forced_verdict >= 0
+                    stage == "verdict"
+                    and self.max_reasoning_steps_before_forced_verdict >= 0
                     and len(completed) >= self.max_reasoning_steps_before_forced_verdict
                     and not action.startswith("<verdict>")
                 ):
@@ -106,15 +130,14 @@ class RolloutTrainer:
                         **agent_debug,
                         "forced_verdict_used": True,
                         "forced_verdict_action": action,
-                        "forced_verdict_reason": (
-                            "reached_max_reasoning_steps_before_forced_verdict"
-                        ),
+                        "forced_verdict_reason": "reached_verdict_stage_without_valid_verdict",
                     }
                 else:
                     agent_debug = {
                         **agent_debug,
                         "forced_verdict_used": False,
                     }
+
                 actions.append(action)
                 agent_debug_by_index.append(agent_debug)
 

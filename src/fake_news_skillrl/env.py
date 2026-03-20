@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence
 
@@ -11,7 +12,7 @@ from .schema import FakeNewsSample
 
 @dataclass(slots=True)
 class FakeNewsEnvConfig:
-    max_steps: int = 5
+    max_steps: int = 3
     invalid_action_penalty: float = -0.2
     correct_label_reward: float = 1.0
     wrong_label_penalty: float = -1.0
@@ -81,18 +82,22 @@ class FakeNewsEnv:
                 return stage
         return "verdict"
 
+    def _current_role(self, state: EpisodeState) -> str:
+        return "worker" if self._current_stage(state) == "worker_skill" else "analyzer"
+
     def _render_observation(self, state: EpisodeState) -> str:
         stage = self._current_stage(state)
-        if stage == "skill_application":
+        if stage == "worker_skill":
             state.retrieved_skill_prompt = self._retrieve_skills_for_state(state)
-        return build_stage_prompt(
+        prompt = build_stage_prompt(
             sample=state.sample,
             stage=stage,
             stage_outputs=state.stage_outputs,
             step_index=min(state.step_index + 1, self.config.max_steps),
             max_steps=self.config.max_steps,
-            skill_prompt=state.retrieved_skill_prompt if stage == "skill_application" else "",
+            skill_prompt=state.retrieved_skill_prompt if stage == "worker_skill" else "",
         )
+        return f"{prompt}\n## Current Role\n{self._current_role(state)}\n"
 
     def _retrieve_skills_for_state(self, state: EpisodeState) -> str:
         if self.memory is None:
@@ -100,9 +105,7 @@ class FakeNewsEnv:
         retrieval_query = "\n".join(
             [
                 state.sample.task_description,
-                state.stage_outputs.get("visual_understanding", ""),
-                state.stage_outputs.get("claim_extraction", ""),
-                state.stage_outputs.get("consistency_check", ""),
+                state.stage_outputs.get("analyzer_report", ""),
             ]
         )
         retrieved = self.memory.retrieve(task_description=retrieval_query)
@@ -113,6 +116,7 @@ class FakeNewsEnv:
             return 0.0, {"is_action_valid": False, "error": "Episode already complete.", "won": False}
 
         stage = self._current_stage(state)
+        role = self._current_role(state)
         state.step_index += 1
 
         if stage == "verdict":
@@ -134,6 +138,8 @@ class FakeNewsEnv:
             return reward, {
                 "is_action_valid": True,
                 "predicted_label": parsed.payload["label"],
+                "role": role,
+                "stage": stage,
                 "won": parsed.payload["label"] == state.sample.label,
             }
 
@@ -145,39 +151,71 @@ class FakeNewsEnv:
             return self.config.invalid_action_penalty, {
                 "is_action_valid": False,
                 "error": f"{stage} stage requires non-empty output.",
+                "role": role,
                 "won": False,
                 **({"termination_reason": "max_steps"} if state.done else {}),
             }
 
         state.stage_outputs[stage] = normalized
-        if state.step_index >= self.config.max_steps and self._current_stage(state) != "verdict":
-            state.done = True
-            return 0.0, {
-                "is_action_valid": True,
-                "stage": stage,
-                "reasoning_action": stage,
-                "won": False,
-                "termination_reason": "max_steps",
-            }
-        return 0.0, {"is_action_valid": True, "stage": stage, "reasoning_action": stage, "won": False}
+        return 0.0, {
+            "is_action_valid": True,
+            "stage": stage,
+            "role": role,
+            "reasoning_action": stage,
+            "won": False,
+        }
 
     def _normalize_stage_output(self, action: str, stage: str) -> str:
-        cleaned = action.strip().replace("<|im_end|>", "").strip()
+        cleaned = (
+            action.strip()
+            .replace("<|im_end|>", "")
+            .replace("<|endoftext|>", "")
+            .strip()
+        )
         if not cleaned:
             return ""
 
-        expected_tag = {
-            "visual_understanding": "visual_understanding",
-            "claim_extraction": "create",
-            "consistency_check": "check",
-            "skill_application": "use_skill",
-        }[stage]
-
         parsed = parse_action(cleaned, max_frame_index=0)
-        if parsed.is_valid and parsed.action_type == expected_tag:
-            return str(parsed.payload["content"]).strip()
         if parsed.is_valid:
-            return ""
-        if cleaned.startswith("<"):
-            return ""
+            if parsed.action_type == "verdict":
+                return ""
+            return str(parsed.payload.get("content", "")).strip()
+
+        json_like = cleaned
+        if cleaned.startswith("```"):
+            json_like = cleaned.strip("`").strip()
+        if json_like.startswith("{") and json_like.endswith("}"):
+            try:
+                payload = json.loads(json_like)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                normalized = self._normalize_json_stage_output(payload, stage)
+                if normalized:
+                    return normalized
+
+        for prefix in ("analyzer_report:", "worker_skill:", "visual_understanding:", "skill:"):
+            if cleaned.lower().startswith(prefix):
+                cleaned = cleaned[len(prefix):].strip()
+                break
         return cleaned
+
+    @staticmethod
+    def _normalize_json_stage_output(payload: Dict[str, Any], stage: str) -> str:
+        if stage == "analyzer_report":
+            visual = str(payload.get("visual") or payload.get("visual_understanding") or "").strip()
+            claim = str(payload.get("claim") or payload.get("claim_extraction") or "").strip()
+            need = str(payload.get("need") or payload.get("request") or payload.get("skill_request") or "").strip()
+            lines = []
+            if visual:
+                lines.append(f"Visual: {visual}")
+            if claim:
+                lines.append(f"Claim: {claim}")
+            if need:
+                lines.append(f"Need: {need}")
+            return "\n".join(lines).strip()
+        if stage == "worker_skill":
+            skill = str(payload.get("skill") or payload.get("response") or payload.get("principle") or "").strip()
+            if skill:
+                return f"Skill: {skill}"
+        return ""

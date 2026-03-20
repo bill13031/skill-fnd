@@ -37,7 +37,7 @@ def main() -> None:
         repetition_penalty=args.repetition_penalty,
         trust_remote_code=args.trust_remote_code,
     )
-    builder = SFTDataBuilder(agent=agent)
+    builder = SFTDataBuilder(analyzer_agent=agent, worker_agent=agent)
     rows = builder.build(samples)
     dump_jsonl(args.output, rows)
     print(f"Wrote {len(rows)} SFT rows to {Path(args.output)}")

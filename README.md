@@ -10,7 +10,7 @@
 The current version focuses on a practical local pipeline:
 
 - normalize short-video samples into a common schema,
-- run a controlled multi-stage episode over caption text, transcript/OCR if available, and sampled video frames,
+- run a controlled two-agent episode over caption text, transcript/OCR if available, and sampled video frames,
 - finish with a structured verdict:
 
 ```xml
@@ -55,25 +55,32 @@ The agent should behave like a short-video content credibility analyst, not a ge
 - `real` means the post is factual, benign, or expressive without making a misleading factual claim.
 Harmless exaggeration, metaphor, humor, or expressive social-video language should be allowed to pass when it is not making a concrete misleading factual claim.
 
-### Controlled Pipeline
+### Controlled Two-Agent Pipeline
 
-The environment provides the full case package up front and the controller decides the reasoning stage. The model does not choose the next stage itself.
+The environment provides the full case package up front and the controller decides the collaboration stage. The model does not choose the next stage itself.
 
 The current controlled stages are:
 
-- `visual_understanding`
-- `claim_extraction`
-- `consistency_check`
-- `skill_application`
+- `analyzer_report`
+- `worker_skill`
 - `verdict`
 
-At the first four stages, the model returns short plain-text outputs. Only the final stage is strictly structured:
+The collaboration pattern is:
+
+1. `Analyzer` reads the post and frames, then writes a short report:
+   - what is visually shown
+   - what claim the post makes
+   - what kind of skill would help judge the case
+2. `Worker` reads that report, dynamically retrieves relevant skills, and returns one short skill for the Analyzer.
+3. `Analyzer` uses the original case plus the Worker-provided skill to return the final verdict.
+
+Only the final stage is strictly structured:
 
 ```xml
 <verdict>{"label":"fake|real","rationale":"..."}</verdict>
 ```
 
-This design keeps stage control deterministic while still allowing dynamic skill retrieval at the `skill_application` stage.
+This design keeps stage control deterministic while still allowing dynamic skill retrieval at the `worker_skill` stage.
 
 ### Skill Bank
 
@@ -85,7 +92,7 @@ The skill bank uses the same high-level structure as SkillRL:
 
 Template retrieval is implemented first. Embedding retrieval is left as a future extension point.
 
-Skills are no longer injected at reset. They are retrieved dynamically only when the episode reaches the `skill_application` stage.
+Skills are no longer injected at reset. They are retrieved dynamically only when the episode reaches the `worker_skill` stage.
 
 ## Quick Start
 
@@ -159,7 +166,7 @@ Runtime notes:
 
 - Evaluation with a VL model is sequential in this standalone project, so reducing `--max-new-tokens` and `--max-samples` is often the fastest way to iterate.
 - `--attach-frames-first-step-only` is enabled by default and prevents re-sending every frame image on later reasoning steps.
-- `--max-reasoning-steps-before-forced-verdict` keeps the rollout from spending too many generations on intermediate stages before emitting a forced fallback verdict.
+- `--max-reasoning-steps-before-forced-verdict` only applies once the collaboration reaches the verdict stage; it prevents the Analyzer from stalling without a valid verdict block.
 - The Qwen path now logs per-step observations and raw model output so stage failures are easier to debug.
 
 ## Current Scope
@@ -170,12 +177,13 @@ This project is fully runnable and testable, but the model-training layer is int
 - RL-style episodic rollout, reward computation, and evaluation are implemented.
 - The agent/model interface is modular and now includes a Qwen VL-backed path using `AutoProcessor` and `AutoModelForImageTextToText`.
 - The model-facing prompt is intentionally simplified: no metadata, no frame descriptions, no evidence-list supervision, and no empty transcript/OCR placeholders.
-- The controller now enforces the reasoning order while leaving skill retrieval dynamic at the skill stage.
+- The controller now enforces the collaboration order while leaving skill retrieval dynamic at the Worker stage.
 
 ## Future Extensions
 
 - stronger frame extraction and video preprocessing,
 - embedding-based skill retrieval,
 - dynamic skill creation and memory update from solved cases,
+- richer Analyzer/Worker coordination once the basic collaboration loop is stable,
 - richer reward shaping once better supervision is available,
 - direct integration with a large-model trainer.
