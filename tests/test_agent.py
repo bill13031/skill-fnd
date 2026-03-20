@@ -52,7 +52,7 @@ def test_explain_parse_failure_reports_reason():
         data_source="test",
     )
     reason = QwenVLAgent._explain_parse_failure("I think this is fake", sample)
-    assert "Exactly one create, check, use_skill, or verdict block is required." in reason
+    assert "Exactly one visual_understanding, create, check, use_skill, or verdict block is required." in reason
 
 
 def test_extract_first_complete_block_from_multi_action_output():

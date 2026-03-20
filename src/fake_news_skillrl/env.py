@@ -11,7 +11,7 @@ from .schema import FakeNewsSample
 
 @dataclass(slots=True)
 class FakeNewsEnvConfig:
-    max_steps: int = 4
+    max_steps: int = 5
     require_evidence_before_verdict: bool = False
     invalid_action_penalty: float = -0.2
     correct_label_reward: float = 1.0
@@ -100,6 +100,7 @@ class FakeNewsEnv:
             sample=state.sample,
             visible_evidence=visible,
             inspected_items=state.inspected_items,
+            allowed_actions=self._allowed_action_types(state),
             step_index=min(state.step_index + 1, self.config.max_steps),
             max_steps=self.config.max_steps,
             skill_prompt=state.skill_prompt,
@@ -118,7 +119,25 @@ class FakeNewsEnv:
                 "won": False,
             }
 
-        if parsed.action_type in {"create", "check", "use_skill"}:
+        allowed_actions = self._allowed_action_types(state)
+        if parsed.action_type not in allowed_actions:
+            state.invalid_action_count += 1
+            return self.config.invalid_action_penalty, {
+                "is_action_valid": False,
+                "error": f"Action '{parsed.action_type}' is not allowed now. Allowed action(s): {', '.join(allowed_actions)}.",
+                "won": False,
+            }
+
+        if parsed.action_type in {"visual_understanding", "create", "check", "use_skill"}:
+            if state.inspected_items:
+                last_action_type = state.inspected_items[-1].split(":", 1)[0]
+                if last_action_type == parsed.action_type:
+                    state.invalid_action_count += 1
+                    return self.config.invalid_action_penalty, {
+                        "is_action_valid": False,
+                        "error": "Do not repeat the same action type on consecutive turns.",
+                        "won": False,
+                    }
             content = parsed.payload["content"]
             state.inspected_items.append(f"{parsed.action_type}: {content}")
             return 0.0, {
@@ -150,11 +169,26 @@ class FakeNewsEnv:
         return self.config.correct_label_reward if label == state.sample.label else self.config.wrong_label_penalty
 
     def _default_visible_evidence(self, sample: FakeNewsSample) -> List[str]:
-        evidence = [
-            f"[post_text]\n{sample.post_text}",
-            f"[transcript]\n{sample.transcript or '[not available]'}",
-            f"[ocr_text]\n{sample.ocr_text or '[not available]'}",
-        ]
+        evidence = [f"[post_text]\n{sample.post_text}"]
+        if sample.transcript.strip():
+            evidence.append(f"[transcript]\n{sample.transcript}")
+        if sample.ocr_text.strip():
+            evidence.append(f"[ocr_text]\n{sample.ocr_text}")
         if sample.frames:
             evidence.append(f"[attached_frames]\n{len(sample.frames)} frame image(s) are attached directly to the model input.")
         return evidence
+
+    @staticmethod
+    def _allowed_action_types(state: EpisodeState) -> List[str]:
+        history_types = [item.split(":", 1)[0] for item in state.inspected_items]
+        if not history_types:
+            return ["visual_understanding"]
+        if history_types == ["visual_understanding"]:
+            return ["create"]
+        if history_types == ["visual_understanding", "create"]:
+            return ["check"]
+        if history_types == ["visual_understanding", "create", "check"]:
+            return ["use_skill", "verdict"]
+        if history_types == ["visual_understanding", "create", "check", "use_skill"]:
+            return ["verdict"]
+        return ["verdict"]

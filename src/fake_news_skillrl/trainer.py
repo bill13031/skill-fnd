@@ -32,6 +32,9 @@ class SFTDataBuilder:
             while True:
                 action = self.agent.next_action(sample, inspected, observation)
                 trajectory.append({"role": "assistant", "content": action})
+                if action.startswith("<visual_understanding>"):
+                    inspected.append(f"visual_understanding: {action}")
+                    continue
                 if action.startswith("<create>"):
                     inspected.append(f"create: {action}")
                     continue
@@ -60,7 +63,7 @@ class RolloutTrainer:
         self,
         env: FakeNewsEnv,
         agent: BaseFakeNewsAgent | None = None,
-        max_reasoning_steps_before_forced_verdict: int = 3,
+        max_reasoning_steps_before_forced_verdict: int = 4,
     ) -> None:
         self.env = env
         self.agent = agent or HeuristicFakeNewsAgent()
@@ -127,7 +130,9 @@ class RolloutTrainer:
                     traces[index].infos.append(infos[index])
                     traces[index].agent_debug.append(agent_debug_by_index[index])
                     if infos[index].get("is_action_valid"):
-                        if action.startswith("<create>"):
+                        if action.startswith("<visual_understanding>"):
+                            inspected_items[index].append(f"visual_understanding: {action}")
+                        elif action.startswith("<create>"):
                             inspected_items[index].append(f"create: {action}")
                         elif action.startswith("<check>"):
                             inspected_items[index].append(f"check: {action}")

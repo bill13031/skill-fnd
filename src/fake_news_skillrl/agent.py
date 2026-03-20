@@ -46,7 +46,9 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         observation: str,
     ) -> str:
         action_kinds = [item.split(":", 1)[0] for item in inspected_items]
-        if "create" not in action_kinds:
+        if "visual_understanding" not in action_kinds:
+            action = "<visual_understanding>Summarize only the visible content in the attached frames without judging the claim yet.</visual_understanding>"
+        elif "create" not in action_kinds:
             action = "<create>Break the post into its main factual claim and any credibility risks.</create>"
         elif "check" not in action_kinds:
             action = "<check>Compare the caption, transcript, OCR, and attached frames for support or contradiction of the main claim.</check>"
@@ -216,7 +218,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
                     f"{observation}\n"
                     "Respond with exactly one valid action block and no extra commentary.\n"
                     "All provided inputs are already available in the case.\n"
-                    "Use create, check, use_skill, and verdict actions only.\n"
+                    "Use visual_understanding, create, check, use_skill, and verdict actions only.\n"
                 ),
             }
         ]

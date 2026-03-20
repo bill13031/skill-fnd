@@ -37,7 +37,7 @@ def main() -> None:
     parser.add_argument(
         "--max-reasoning-steps-before-forced-verdict",
         type=int,
-        default=3,
+        default=4,
         help="Force a heuristic fallback verdict after this many valid reasoning steps if the agent still has not produced one.",
     )
     parser.add_argument("--trust-remote-code", action="store_true")

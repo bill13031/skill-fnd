@@ -32,7 +32,9 @@ class _LoopingAgent:
     model_name = "looping-test"
 
     def next_action(self, sample, inspected_items, observation):
-        del sample, inspected_items, observation
+        del sample, observation
+        if not inspected_items:
+            return "<visual_understanding>Describe the visible content only.</visual_understanding>"
         return "<create>keep reasoning forever</create>"
 
 
@@ -46,5 +48,5 @@ def test_rollout_trainer_forces_verdict_after_reasoning_limit():
     )
     results = trainer.run(samples)
 
-    assert results["traces"][0]["actions"][0].startswith("<create>")
+    assert results["traces"][0]["actions"][0].startswith("<visual_understanding>")
     assert results["traces"][0]["actions"][1].startswith("<verdict>")

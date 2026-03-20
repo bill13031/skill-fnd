@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 
+VISUAL_UNDERSTANDING_RE = re.compile(r"<visual_understanding>(.*?)</visual_understanding>", re.IGNORECASE | re.DOTALL)
 CREATE_RE = re.compile(r"<create>(.*?)</create>", re.IGNORECASE | re.DOTALL)
 CHECK_RE = re.compile(r"<check>(.*?)</check>", re.IGNORECASE | re.DOTALL)
 USE_SKILL_RE = re.compile(r"<use_skill>(.*?)</use_skill>", re.IGNORECASE | re.DOTALL)
@@ -92,7 +93,7 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
             action_type="invalid",
             payload={},
             is_valid=False,
-            error="Exactly one create, check, use_skill, or verdict block is required.",
+            error="Exactly one visual_understanding, create, check, use_skill, or verdict block is required.",
         )
 
     if stripped.startswith("<verdict>"):
@@ -100,6 +101,9 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
         if match is None:
             return ParsedAction(action, "verdict", {}, False, "Verdict action must be a single complete <verdict> block.")
         return _parse_verdict_payload(match.group(1), action)
+
+    if stripped.startswith("<visual_understanding>"):
+        return _parse_intermediate_action(stripped, "visual_understanding", VISUAL_UNDERSTANDING_RE, action)
 
     if stripped.startswith("<create>"):
         return _parse_intermediate_action(stripped, "create", CREATE_RE, action)
@@ -110,11 +114,12 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
     if stripped.startswith("<use_skill>"):
         return _parse_intermediate_action(stripped, "use_skill", USE_SKILL_RE, action)
 
+    visual_matches = VISUAL_UNDERSTANDING_RE.findall(stripped)
     create_matches = CREATE_RE.findall(stripped)
     check_matches = CHECK_RE.findall(stripped)
     use_skill_matches = USE_SKILL_RE.findall(stripped)
     verdict_matches = VERDICT_RE.findall(stripped)
-    non_verdict_count = len(create_matches) + len(check_matches) + len(use_skill_matches)
+    non_verdict_count = len(visual_matches) + len(create_matches) + len(check_matches) + len(use_skill_matches)
     if verdict_matches and non_verdict_count:
         return ParsedAction(
             raw_action=action,
@@ -128,5 +133,5 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
         action_type="invalid",
         payload={},
         is_valid=False,
-        error="Exactly one create, check, use_skill, or verdict block is required.",
+        error="Exactly one visual_understanding, create, check, use_skill, or verdict block is required.",
     )

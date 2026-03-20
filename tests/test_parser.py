@@ -1,6 +1,12 @@
 from fake_news_skillrl.parser import parse_action
 
 
+def test_parse_valid_visual_understanding():
+    parsed = parse_action("<visual_understanding>A pilot stands beside an aircraft.</visual_understanding>", max_frame_index=2)
+    assert parsed.is_valid
+    assert parsed.action_type == "visual_understanding"
+
+
 def test_parse_valid_create():
     parsed = parse_action("<create>Check whether the claim is concrete.</create>", max_frame_index=2)
     assert parsed.is_valid
