@@ -48,7 +48,10 @@ def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
         "5. Label meaning:\n"
         "   - fake: the post contains misleading or non-factual content presented as true or documentary.\n"
         "   - real: the post is factual, benign, or expressive without making a misleading factual claim.\n"
-        "6. Keep the rationale short, concrete, and grounded in the provided inputs.\n"
+        "6. For create/check/use_skill, write one short plain sentence only.\n"
+        "7. Do not use bullet points, markdown, numbering, or extra commentary.\n"
+        "8. Always close the XML tag you start.\n"
+        "9. Keep the rationale short, concrete, and grounded in the provided inputs.\n"
     )
 
 

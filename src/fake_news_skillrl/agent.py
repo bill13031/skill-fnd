@@ -115,8 +115,9 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
 @dataclass(slots=True)
 class QwenVLAgent(BaseFakeNewsAgent):
     model_name: str = DEFAULT_QWEN_VL_MODEL
-    max_new_tokens: int = 160
+    max_new_tokens: int = 192
     temperature: float = 0.0
+    repetition_penalty: float = 1.02
     trust_remote_code: bool = False
     attach_frames_first_step_only: bool = True
     allow_heuristic_fallback: bool = False
@@ -176,6 +177,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
             max_new_tokens=self.max_new_tokens,
             do_sample=self.temperature > 0.0,
             temperature=max(self.temperature, 1e-5),
+            repetition_penalty=self.repetition_penalty,
             pad_token_id=self._processor.tokenizer.eos_token_id,
         )
         generated = self._processor.decode(
@@ -284,8 +286,9 @@ class QwenVLAgent(BaseFakeNewsAgent):
 def build_agent(
     agent_type: str,
     model_name: str | None = None,
-    max_new_tokens: int = 160,
+    max_new_tokens: int = 192,
     temperature: float = 0.0,
+    repetition_penalty: float = 1.02,
     trust_remote_code: bool = False,
     attach_frames_first_step_only: bool = True,
     allow_heuristic_fallback: bool = False,
@@ -297,6 +300,7 @@ def build_agent(
             model_name=model_name or DEFAULT_QWEN_VL_MODEL,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
+            repetition_penalty=repetition_penalty,
             trust_remote_code=trust_remote_code,
             attach_frames_first_step_only=attach_frames_first_step_only,
             allow_heuristic_fallback=allow_heuristic_fallback,

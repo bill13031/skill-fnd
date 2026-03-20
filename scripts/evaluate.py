@@ -25,8 +25,9 @@ def main() -> None:
     parser.add_argument("--agent-type", default="heuristic", choices=["heuristic", "qwen_vl", "transformers"])
     parser.add_argument("--model-name", default=None, help="Local or HF model name for the VL agent.")
     parser.add_argument("--max-samples", type=int, default=None, help="Optional cap on the number of samples to evaluate.")
-    parser.add_argument("--max-new-tokens", type=int, default=160)
+    parser.add_argument("--max-new-tokens", type=int, default=192)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--repetition-penalty", type=float, default=1.02)
     parser.add_argument(
         "--attach-frames-first-step-only",
         action=argparse.BooleanOptionalAction,
@@ -52,6 +53,7 @@ def main() -> None:
         model_name=args.model_name,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
+        repetition_penalty=args.repetition_penalty,
         trust_remote_code=args.trust_remote_code,
         attach_frames_first_step_only=args.attach_frames_first_step_only,
     )

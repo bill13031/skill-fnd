@@ -8,6 +8,20 @@ def test_parse_valid_create():
     assert "claim" in parsed.payload["content"]
 
 
+def test_parse_incomplete_create_is_tolerated():
+    parsed = parse_action("<create>State the main claim in one sentence.", max_frame_index=2)
+    assert parsed.is_valid
+    assert parsed.action_type == "create"
+    assert "main claim" in parsed.payload["content"]
+
+
+def test_parse_create_with_trailing_text_is_tolerated():
+    parsed = parse_action("<create>State the main claim.</create>\nExtra text", max_frame_index=2)
+    assert parsed.is_valid
+    assert parsed.action_type == "create"
+    assert parsed.payload["content"] == "State the main claim."
+
+
 def test_parse_invalid_empty_create():
     parsed = parse_action("<create></create>", max_frame_index=1)
     assert not parsed.is_valid

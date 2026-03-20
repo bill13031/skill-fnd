@@ -32,6 +32,36 @@ def _parse_text_action_payload(
     return ParsedAction(raw_action, action_type, {"content": content}, True)
 
 
+def _parse_intermediate_action(
+    stripped: str,
+    action_type: str,
+    pattern: re.Pattern[str],
+    raw_action: str,
+) -> ParsedAction:
+    match = pattern.fullmatch(stripped)
+    if match is not None:
+        return _parse_text_action_payload(action_type, match.group(1), raw_action)
+
+    opening_tag = f"<{action_type}>"
+    closing_tag = f"</{action_type}>"
+    if not stripped.startswith(opening_tag):
+        return ParsedAction(raw_action, action_type, {}, False, f"{action_type.title()} action must start with <{action_type}>.")
+
+    content = stripped[len(opening_tag) :]
+    if closing_tag in content:
+        content, tail = content.split(closing_tag, 1)
+        lowered_tail = tail.lower()
+        if any(tag in lowered_tail for tag in ("<create>", "<check>", "<use_skill>", "<verdict>")):
+            return ParsedAction(
+                raw_action=raw_action,
+                action_type="invalid",
+                payload={},
+                is_valid=False,
+                error="Cannot mix intermediate actions and verdict actions.",
+            )
+    return _parse_text_action_payload(action_type, content, raw_action)
+
+
 def _parse_verdict_payload(raw_payload: str, raw_action: str) -> ParsedAction:
     try:
         verdict_payload = json.loads(raw_payload.strip())
@@ -72,22 +102,13 @@ def parse_action(action: str, max_frame_index: int) -> ParsedAction:
         return _parse_verdict_payload(match.group(1), action)
 
     if stripped.startswith("<create>"):
-        match = CREATE_RE.fullmatch(stripped)
-        if match is None:
-            return ParsedAction(action, "create", {}, False, "Create action must be a single complete <create> block.")
-        return _parse_text_action_payload("create", match.group(1), action)
+        return _parse_intermediate_action(stripped, "create", CREATE_RE, action)
 
     if stripped.startswith("<check>"):
-        match = CHECK_RE.fullmatch(stripped)
-        if match is None:
-            return ParsedAction(action, "check", {}, False, "Check action must be a single complete <check> block.")
-        return _parse_text_action_payload("check", match.group(1), action)
+        return _parse_intermediate_action(stripped, "check", CHECK_RE, action)
 
     if stripped.startswith("<use_skill>"):
-        match = USE_SKILL_RE.fullmatch(stripped)
-        if match is None:
-            return ParsedAction(action, "use_skill", {}, False, "Use_skill action must be a single complete <use_skill> block.")
-        return _parse_text_action_payload("use_skill", match.group(1), action)
+        return _parse_intermediate_action(stripped, "use_skill", USE_SKILL_RE, action)
 
     create_matches = CREATE_RE.findall(stripped)
     check_matches = CHECK_RE.findall(stripped)
