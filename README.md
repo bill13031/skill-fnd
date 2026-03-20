@@ -2,7 +2,7 @@
 
 `fake-news-skillrl` is a standalone, lightweight recreation of the core SkillRL idea for multimodal social-video credibility assessment. It does not depend on the `SkillRL` package at runtime, but it borrows several design ideas from it:
 
-- structured action parsing,
+- structured verdict parsing,
 - skill-bank retrieval for prompt injection,
 - multi-step environment rollouts,
 - prompt-first task framing for later VL model integration.
@@ -10,7 +10,7 @@
 The current version focuses on a practical local pipeline:
 
 - normalize short-video samples into a common schema,
-- run a short investigative episode over caption text, transcript/OCR if available, and sampled video frames,
+- run a controlled multi-stage episode over caption text, transcript/OCR if available, and sampled video frames,
 - finish with a structured verdict:
 
 ```xml
@@ -45,7 +45,7 @@ Each sample is normalized into a single record with the following keys:
 - `split`
 - `data_source`
 
-`frames` is a list of extracted frame descriptors. In v1, this is frame-first rather than native video tensor input.
+`frames` is a list of extracted frame image paths. In v1, this is frame-first rather than native video tensor input.
 
 ### Task Framing
 
@@ -55,21 +55,25 @@ The agent should behave like a short-video content credibility analyst, not a ge
 - `real` means the post is factual, benign, or expressive without making a misleading factual claim.
 Harmless exaggeration, metaphor, humor, or expressive social-video language should be allowed to pass when it is not making a concrete misleading factual claim.
 
-### Action Protocol
+### Controlled Pipeline
 
-The environment provides the full case package up front. The agent should not ask to reveal evidence item by item.
+The environment provides the full case package up front and the controller decides the reasoning stage. The model does not choose the next stage itself.
 
-Intermediate actions are:
+The current controlled stages are:
 
-- `<create>...</create>`
-- `<check>...</check>`
-- `<use_skill>...</use_skill>`
+- `visual_understanding`
+- `claim_extraction`
+- `consistency_check`
+- `skill_application`
+- `verdict`
 
-The episode ends with:
+At the first four stages, the model returns short plain-text outputs. Only the final stage is strictly structured:
 
 ```xml
 <verdict>{"label":"fake|real","rationale":"..."}</verdict>
 ```
+
+This design keeps stage control deterministic while still allowing dynamic skill retrieval at the `skill_application` stage.
 
 ### Skill Bank
 
@@ -80,6 +84,8 @@ The skill bank uses the same high-level structure as SkillRL:
 - `common_mistakes`
 
 Template retrieval is implemented first. Embedding retrieval is left as a future extension point.
+
+Skills are no longer injected at reset. They are retrieved dynamically only when the episode reaches the `skill_application` stage.
 
 ## Quick Start
 
@@ -140,10 +146,11 @@ python scripts/evaluate.py \
   --skill-bank memory_data/fake_news/claude_style_skills.json \
   --agent-type qwen_vl \
   --model-name ./model/Qwen3.5-2B \
-  --max-samples 32 \
-  --max-new-tokens 48 \
+  --max-samples 8 \
+  --max-new-tokens 192 \
+  --repetition-penalty 1.02 \
   --attach-frames-first-step-only \
-  --max-reasoning-steps-before-forced-verdict 2
+  --max-reasoning-steps-before-forced-verdict 4
 ```
 
 The Qwen VL agent now moves the model to CUDA automatically when `torch.cuda.is_available()` is true, and falls back to CPU otherwise.
@@ -152,7 +159,8 @@ Runtime notes:
 
 - Evaluation with a VL model is sequential in this standalone project, so reducing `--max-new-tokens` and `--max-samples` is often the fastest way to iterate.
 - `--attach-frames-first-step-only` is enabled by default and prevents re-sending every frame image on later reasoning steps.
-- `--max-reasoning-steps-before-forced-verdict` keeps the rollout from spending too many generations on intermediate actions before emitting a forced fallback verdict.
+- `--max-reasoning-steps-before-forced-verdict` keeps the rollout from spending too many generations on intermediate stages before emitting a forced fallback verdict.
+- The Qwen path now logs per-step observations and raw model output so stage failures are easier to debug.
 
 ## Current Scope
 
@@ -161,11 +169,13 @@ This project is fully runnable and testable, but the model-training layer is int
 - SFT data generation is implemented.
 - RL-style episodic rollout, reward computation, and evaluation are implemented.
 - The agent/model interface is modular and now includes a Qwen VL-backed path using `AutoProcessor` and `AutoModelForImageTextToText`.
-- The model-facing prompt is intentionally simplified: no metadata, no frame descriptions, and no evidence-list supervision.
+- The model-facing prompt is intentionally simplified: no metadata, no frame descriptions, no evidence-list supervision, and no empty transcript/OCR placeholders.
+- The controller now enforces the reasoning order while leaving skill retrieval dynamic at the skill stage.
 
 ## Future Extensions
 
 - stronger frame extraction and video preprocessing,
 - embedding-based skill retrieval,
+- dynamic skill creation and memory update from solved cases,
 - richer reward shaping once better supervision is available,
 - direct integration with a large-model trainer.

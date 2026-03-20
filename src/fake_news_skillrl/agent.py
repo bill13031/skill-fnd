@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,7 @@ from .parser import CREATE_RE, CHECK_RE, USE_SKILL_RE, VERDICT_RE
 
 
 DEFAULT_QWEN_VL_MODEL = "Qwen/Qwen3.5-2B"
+CURRENT_STAGE_RE = re.compile(r"## Current Stage\n([a-z_]+)", re.IGNORECASE)
 
 
 def select_inference_device(cuda_available: bool) -> str:
@@ -45,15 +47,15 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         inspected_items: List[str],
         observation: str,
     ) -> str:
-        action_kinds = [item.split(":", 1)[0] for item in inspected_items]
-        if "visual_understanding" not in action_kinds:
-            action = "<visual_understanding>Summarize only the visible content in the attached frames without judging the claim yet.</visual_understanding>"
-        elif "create" not in action_kinds:
-            action = "<create>Break the post into its main factual claim and any credibility risks.</create>"
-        elif "check" not in action_kinds:
-            action = "<check>Compare the caption, transcript, OCR, and attached frames for support or contradiction of the main claim.</check>"
-        elif "use_skill" not in action_kinds:
-            action = "<use_skill>Apply the most relevant credibility skill: separate expressive exaggeration from concrete misleading factual claims.</use_skill>"
+        current_stage = self._detect_stage(observation)
+        if current_stage == "visual_understanding":
+            action = "The frames show stylized or ambiguous imagery rather than verified documentary footage."
+        elif current_stage == "claim_extraction":
+            action = "The post claims a concrete real-world event happened as shown in the video."
+        elif current_stage == "consistency_check":
+            action = "The provided visuals do not clearly verify the specific factual claim made by the post."
+        elif current_stage == "skill_application":
+            action = "Apply the principle that extraordinary factual claims need clear support from the provided visuals."
         else:
             action = self._verdict_action(sample)
         self.last_debug = {
@@ -114,6 +116,13 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
     def get_last_debug(self) -> Dict[str, Any]:
         return dict(self.last_debug)
 
+    @staticmethod
+    def _detect_stage(observation: str) -> str:
+        match = CURRENT_STAGE_RE.search(observation)
+        if match is None:
+            return "verdict"
+        return match.group(1).strip().lower()
+
 
 @dataclass(slots=True)
 class QwenVLAgent(BaseFakeNewsAgent):
@@ -154,6 +163,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
         inspected_items: List[str],
         observation: str,
     ) -> str:
+        current_stage = HeuristicFakeNewsAgent._detect_stage(observation)
         messages = self._build_messages(sample, observation, inspected_items)
         self.last_debug = {
             "agent_type": "qwen_vl",
@@ -187,7 +197,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
             outputs[0][inputs["input_ids"].shape[-1] :],
         ).strip()
         self.last_debug["raw_output"] = generated
-        action = self._extract_first_action(generated, sample)
+        action = self._extract_stage_output(generated, sample, current_stage)
         if action is None:
             parse_failure_reason = self._explain_parse_failure(generated, sample)
             invalid_action = generated.strip().replace("<|im_end|>", "").strip()
@@ -280,6 +290,21 @@ class QwenVLAgent(BaseFakeNewsAgent):
             return None
         matches.sort(key=lambda item: item[0])
         return matches[0][1]
+
+    @staticmethod
+    def _extract_stage_output(text: str, sample: FakeNewsSample, current_stage: str) -> str | None:
+        if current_stage == "verdict":
+            return QwenVLAgent._extract_first_action(text, sample)
+        cleaned = text.strip().replace("<|im_end|>", "").strip()
+        if not cleaned:
+            return None
+        first_complete_block = QwenVLAgent._extract_first_complete_block(cleaned)
+        if first_complete_block is None:
+            return cleaned
+        parsed = parse_action(first_complete_block, max_frame_index=max(0, len(sample.frames) - 1))
+        if parsed.is_valid and parsed.action_type != "verdict":
+            return str(parsed.payload.get("content", "")).strip()
+        return cleaned
 
     @staticmethod
     def _explain_parse_failure(text: str, sample: FakeNewsSample) -> str:

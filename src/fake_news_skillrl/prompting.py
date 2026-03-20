@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Sequence
+from typing import Iterable, List
 
 from .schema import FakeNewsSample
 
 
-def available_case_lines(sample: FakeNewsSample) -> List[str]:
-    lines = ["- post_text"]
-    if sample.transcript.strip():
-        lines.append("- transcript")
-    if sample.ocr_text.strip():
-        lines.append("- ocr_text")
-    if sample.frames:
-        lines.append(f"- attached video frames ({len(sample.frames)})")
-    return lines
+CONTROLLED_STAGES = [
+    "visual_understanding",
+    "claim_extraction",
+    "consistency_check",
+    "skill_application",
+    "verdict",
+]
 
 
 def build_skill_section(skill_prompt: str) -> str:
@@ -22,63 +20,93 @@ def build_skill_section(skill_prompt: str) -> str:
     return f"## Retrieved Skills\n{skill_prompt.strip()}\n\n"
 
 
-def build_initial_prompt(sample: FakeNewsSample, skill_prompt: str = "") -> str:
-    case_info = "\n".join(available_case_lines(sample))
-    transcript_block = f"Transcript: {sample.transcript}\n" if sample.transcript.strip() else ""
-    ocr_block = f"OCR text: {sample.ocr_text}\n" if sample.ocr_text.strip() else ""
-    return (
-        "You are a short-video content credibility analyst.\n"
-        "Your job is to judge whether the post contains misleading or non-factual content using only the provided post information and attached frames.\n"
-        "Do not punish harmless humor, metaphor, excitement, or obvious exaggeration unless the post is making a concrete misleading factual claim.\n\n"
-        f"{build_skill_section(skill_prompt)}"
-        "## Post Information\n"
-        f"Post text: {sample.post_text}\n"
-        f"{transcript_block}"
-        f"{ocr_block}"
-        f"Attached frames: {len(sample.frames)}\n\n"
-        "## Provided Inputs\n"
-        f"{case_info}\n\n"
-        "## Action Rules\n"
-        "1. Use exactly one action per turn.\n"
-        "2. All provided inputs are already shown to you. Do not ask to inspect or reveal anything else.\n"
-        "3. Follow this staged policy:\n"
-        "   <visual_understanding>describe only what is visibly shown in the attached frames, without judging truth yet</visual_understanding>\n"
-        "   <create>state a claim decomposition, suspicion, or working hypothesis</create>\n"
-        "   <check>state what in the provided inputs supports or contradicts a claim</check>\n"
-        "   <use_skill>state which retrieved skill or principle you are applying</use_skill>\n"
-        "4. Finish with:\n"
-        '   <verdict>{"label":"fake|real","rationale":"..."}</verdict>\n'
-        "5. Label meaning:\n"
-        "   - fake: the post contains misleading or non-factual content presented as true or documentary.\n"
-        "   - real: the post is factual, benign, or expressive without making a misleading factual claim.\n"
-        "6. First ground yourself in the visuals, then reason from the caption and any retrieved skill.\n"
-        "7. For visual_understanding/create/check/use_skill, write one short plain sentence only.\n"
-        "8. Do not use bullet points, markdown, numbering, or extra commentary.\n"
-        "9. Always close the XML tag you start.\n"
-        "10. Keep the rationale short, concrete, and grounded in the provided inputs.\n"
-    )
+def _inputs_block(sample: FakeNewsSample) -> str:
+    lines = [f"Post text: {sample.post_text}"]
+    if sample.transcript.strip():
+        lines.append(f"Transcript: {sample.transcript}")
+    if sample.ocr_text.strip():
+        lines.append(f"OCR text: {sample.ocr_text}")
+    lines.append(f"Attached frames: {len(sample.frames)}")
+    return "\n".join(lines)
 
 
-def build_step_prompt(
+def _history_block(stage_outputs: dict[str, str]) -> str:
+    lines: List[str] = []
+    if stage_outputs.get("visual_understanding"):
+        lines.append(f"Visual understanding: {stage_outputs['visual_understanding']}")
+    if stage_outputs.get("claim_extraction"):
+        lines.append(f"Claim extraction: {stage_outputs['claim_extraction']}")
+    if stage_outputs.get("consistency_check"):
+        lines.append(f"Consistency check: {stage_outputs['consistency_check']}")
+    if stage_outputs.get("skill_application"):
+        lines.append(f"Skill application: {stage_outputs['skill_application']}")
+    return "\n".join(lines) if lines else "None yet."
+
+
+def build_stage_prompt(
     sample: FakeNewsSample,
-    visible_evidence: str,
-    inspected_items: Iterable[str],
-    allowed_actions: Sequence[str],
+    stage: str,
+    stage_outputs: dict[str, str],
     step_index: int,
     max_steps: int,
     skill_prompt: str = "",
 ) -> str:
-    history = "\n".join(f"- {item}" for item in inspected_items) if inspected_items else "none"
-    allowed = ", ".join(allowed_actions)
-    return (
-        f"{build_initial_prompt(sample, skill_prompt)}\n"
-        f"## Step\n{step_index} of {max_steps}\n"
-        "## Prior Action History\n"
-        f"{history}\n\n"
-        "## Stage Policy\n"
-        f"Allowed action(s) this turn: {allowed}\n"
-        "Do not repeat the same action type on consecutive turns.\n"
-        "Follow the staged policy strictly: visual_understanding -> create -> check -> use_skill or verdict -> verdict.\n\n"
-        "## Input Reminder\n"
-        f"{visible_evidence.strip() or 'All provided inputs are already shown above.'}\n"
+    header = (
+        "You are a short-video content credibility analyst.\n"
+        "Judge whether the post is misleading or non-factual using only the provided post information and attached frames.\n"
+        "Allow harmless humor, metaphor, excitement, or exaggeration when the post is not making a concrete misleading factual claim.\n\n"
     )
+    shared = (
+        "## Post Information\n"
+        f"{_inputs_block(sample)}\n\n"
+        "## Completed Stages\n"
+        f"{_history_block(stage_outputs)}\n\n"
+        f"## Current Stage\n{stage} ({step_index} of {max_steps})\n\n"
+    )
+
+    if stage == "visual_understanding":
+        return (
+            header
+            + shared
+            + "Describe only what is visibly shown in the attached frames.\n"
+            + "Do not judge whether the post is true or false yet.\n"
+            + "Output one or two plain sentences only.\n"
+        )
+
+    if stage == "claim_extraction":
+        return (
+            header
+            + shared
+            + "State the main concrete factual claim the post is making.\n"
+            + "Output one short plain sentence only.\n"
+        )
+
+    if stage == "consistency_check":
+        return (
+            header
+            + shared
+            + "Compare the claimed event with the visible frames and provided text.\n"
+            + "Say whether the provided inputs support, contradict, or fail to verify the claim.\n"
+            + "Output one short plain sentence only.\n"
+        )
+
+    if stage == "skill_application":
+        return (
+            header
+            + shared
+            + build_skill_section(skill_prompt)
+            + "Apply one retrieved skill if it fits.\n"
+            + "If none fits well, create one short reusable skill for this case.\n"
+            + "Output one short plain sentence only.\n"
+        )
+
+    if stage == "verdict":
+        return (
+            header
+            + shared
+            + "Return exactly one final verdict block and nothing else.\n"
+            + 'Format: <verdict>{"label":"fake|real","rationale":"..."}</verdict>\n'
+            + "Keep the rationale short, concrete, and grounded in the completed stages.\n"
+        )
+
+    raise ValueError(f"Unsupported controlled stage: {stage}")

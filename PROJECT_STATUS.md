@@ -15,11 +15,6 @@ Build a standalone SkillRL-style short-video credibility assessment project that
 - Environment, prompting, parser, skill memory, rollout trainer, and evaluation scripts implemented.
 - Qwen VL model path added with automatic CUDA usage when available.
 - The environment now provides the full case package up front instead of making the agent inspect evidence item by item.
-- The action protocol was redesigned around reasoning-control steps:
-  - `<create>...</create>`
-  - `<check>...</check>`
-  - `<use_skill>...</use_skill>`
-  - final `<verdict>...</verdict>`
 - Fakett raw dataset adapter added:
   - reads `samples.jsonl`,
   - links rows to `[video_id].mp4`,
@@ -34,27 +29,37 @@ Build a standalone SkillRL-style short-video credibility assessment project that
 - The Qwen VL message builder now tries to attach all available frame images directly to the prompt instead of gating them behind inspect actions.
 - VL evaluation now defaults to attaching frames only on the first reasoning step and can force a fallback verdict after a small reasoning budget.
 - The model-facing prompt now hides metadata, frame descriptions, and task-type hints to reduce shortcut bias.
+- The project has now been refactored from an agent-choose loop into a controlled multi-stage pipeline:
+  - visual understanding
+  - claim extraction
+  - consistency check
+  - dynamic skill application
+  - final verdict
+- Skill retrieval is now delayed until the skill-application stage instead of being injected at reset.
+- Intermediate controlled stages now accept short plain-text outputs, while only the final verdict remains strictly parsed as XML+JSON.
+- Local validation currently passes:
+  - full manual test-function suite
+  - heuristic smoke evaluation through the controlled pipeline
 
 ## Current Known Issues
 
-- Qwen VL still shows a tendency to loop or avoid reaching a verdict on small zero-shot runs.
+- Qwen VL may still produce weak stage outputs, but stage control no longer depends on the model choosing the next action correctly.
 - VL quality depends heavily on actual extracted frames being present and informative.
 - The rollout is still sequential and can be slow on large normalized files even with the new runtime controls.
 - The project still uses a lightweight rollout/training scaffold rather than full `verl` integration.
+- Dynamic skill creation is only prompt-level today; newly created skills are not yet persisted back into memory.
 
 ## Recommended Next Moves
 
-1. Re-run Qwen VL evaluation with `--max-samples`, reduced `--max-new-tokens`, and the default first-step-only frame attachment.
-2. Inspect whether frame images are actually being attached and used by the model on the server.
-3. Review traces for:
-   - malformed verdicts,
-   - action loops,
-   - confusion between misleading factual claims and harmless exaggeration.
+1. Re-run Qwen VL evaluation under the controlled stage pipeline and inspect stage-by-stage outputs.
+2. Check whether the visual-understanding stage is actually grounded in the attached frames rather than parroting generic captions.
+3. Evaluate whether the dynamically retrieved skill at the skill stage improves the final verdict rationale.
 4. If zero-shot behavior is still weak:
-   - generate SFT trajectories from the real normalized data,
-   - fine-tune on the new action protocol,
+   - generate SFT trajectories from the controlled pipeline,
+   - fine-tune stage by stage,
    - then re-run evaluation.
-5. Consider `verl` integration once the task framing and action behavior are stable.
+5. Add persistent dynamic skill creation and memory update once the controlled pipeline is stable.
+6. Consider `verl` integration once the controlled pipeline and dynamic skill stage are stable.
 
 ## Notes For Future Work
 

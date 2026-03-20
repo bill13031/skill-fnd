@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Sequence
 from .agent import BaseFakeNewsAgent, HeuristicFakeNewsAgent
 from .env import FakeNewsEnv
 from .metrics import compute_classification_metrics
+from .prompting import build_stage_prompt
 from .schema import FakeNewsSample
 
 
@@ -26,25 +27,32 @@ class SFTDataBuilder:
     def build(self, samples: Iterable[FakeNewsSample]) -> List[Dict[str, object]]:
         rows: List[Dict[str, object]] = []
         for sample in samples:
-            inspected: List[str] = []
+            completed_stages: List[str] = []
+            stage_outputs: Dict[str, str] = {}
             trajectory: List[Dict[str, str]] = []
-            observation = sample.task_description
-            while True:
-                action = self.agent.next_action(sample, inspected, observation)
+            for step_index, stage in enumerate(["visual_understanding", "claim_extraction", "consistency_check", "skill_application"], start=1):
+                observation = build_stage_prompt(
+                    sample=sample,
+                    stage=stage,
+                    stage_outputs=stage_outputs,
+                    step_index=step_index,
+                    max_steps=5,
+                    skill_prompt="",
+                )
+                action = self.agent.next_action(sample, completed_stages, observation)
                 trajectory.append({"role": "assistant", "content": action})
-                if action.startswith("<visual_understanding>"):
-                    inspected.append(f"visual_understanding: {action}")
-                    continue
-                if action.startswith("<create>"):
-                    inspected.append(f"create: {action}")
-                    continue
-                if action.startswith("<check>"):
-                    inspected.append(f"check: {action}")
-                    continue
-                if action.startswith("<use_skill>"):
-                    inspected.append(f"use_skill: {action}")
-                    continue
-                break
+                stage_outputs[stage] = action
+                completed_stages.append(stage)
+            verdict_observation = build_stage_prompt(
+                sample=sample,
+                stage="verdict",
+                stage_outputs=stage_outputs,
+                step_index=5,
+                max_steps=5,
+                skill_prompt="",
+            )
+            action = self.agent.next_action(sample, completed_stages, verdict_observation)
+            trajectory.append({"role": "assistant", "content": action})
             rows.append(
                 {
                     "sample_id": sample.sample_id,
@@ -75,22 +83,22 @@ class RolloutTrainer:
         observations = self.env.reset(samples)
 
         active = [True for _ in samples]
-        inspected_items = [[] for _ in samples]
+        completed_stages = [[] for _ in samples]
 
         while any(active):
             current_observations = list(observations)
             actions: List[str] = []
             agent_debug_by_index: List[Dict[str, object]] = []
-            for is_active, sample, inspected, observation in zip(active, samples, inspected_items, observations):
+            for is_active, sample, completed, observation in zip(active, samples, completed_stages, observations):
                 if not is_active:
                     actions.append("<create>inactive</create>")
                     agent_debug_by_index.append({})
                     continue
-                action = self.agent.next_action(sample, inspected, observation)
+                action = self.agent.next_action(sample, completed, observation)
                 agent_debug = getattr(self.agent, "get_last_debug", lambda: {})()
                 if (
                     self.max_reasoning_steps_before_forced_verdict >= 0
-                    and len(inspected) >= self.max_reasoning_steps_before_forced_verdict
+                    and len(completed) >= self.max_reasoning_steps_before_forced_verdict
                     and not action.startswith("<verdict>")
                 ):
                     action = self._forced_verdict_agent._verdict_action(sample)
@@ -130,14 +138,9 @@ class RolloutTrainer:
                     traces[index].infos.append(infos[index])
                     traces[index].agent_debug.append(agent_debug_by_index[index])
                     if infos[index].get("is_action_valid"):
-                        if action.startswith("<visual_understanding>"):
-                            inspected_items[index].append(f"visual_understanding: {action}")
-                        elif action.startswith("<create>"):
-                            inspected_items[index].append(f"create: {action}")
-                        elif action.startswith("<check>"):
-                            inspected_items[index].append(f"check: {action}")
-                        elif action.startswith("<use_skill>"):
-                            inspected_items[index].append(f"use_skill: {action}")
+                        stage = str(infos[index].get("stage", "")).strip()
+                        if stage:
+                            completed_stages[index].append(stage)
                 active[index] = not dones[index]
 
         success = self.env.success_evaluator()

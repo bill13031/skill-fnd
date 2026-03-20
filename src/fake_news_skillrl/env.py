@@ -4,15 +4,14 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence
 
 from .memory import SkillsOnlyMemory
-from .parser import ParsedAction, parse_action
-from .prompting import build_step_prompt
+from .parser import parse_action
+from .prompting import CONTROLLED_STAGES, build_stage_prompt
 from .schema import FakeNewsSample
 
 
 @dataclass(slots=True)
 class FakeNewsEnvConfig:
     max_steps: int = 5
-    require_evidence_before_verdict: bool = False
     invalid_action_penalty: float = -0.2
     correct_label_reward: float = 1.0
     wrong_label_penalty: float = -1.0
@@ -23,11 +22,10 @@ class EpisodeState:
     sample: FakeNewsSample
     step_index: int = 0
     done: bool = False
-    visible_evidence: List[str] = field(default_factory=list)
-    inspected_items: List[str] = field(default_factory=list)
+    stage_outputs: Dict[str, str] = field(default_factory=dict)
     final_verdict: Dict[str, Any] | None = None
     invalid_action_count: int = 0
-    skill_prompt: str = ""
+    retrieved_skill_prompt: str = ""
 
 
 class FakeNewsEnv:
@@ -37,21 +35,8 @@ class FakeNewsEnv:
         self._states: List[EpisodeState] = []
 
     def reset(self, samples: Sequence[FakeNewsSample]) -> List[str]:
-        self._states = []
-        observations: List[str] = []
-        for sample in samples:
-            skill_prompt = ""
-            if self.memory is not None:
-                retrieved = self.memory.retrieve(task_description=sample.task_description)
-                skill_prompt = self.memory.format_for_prompt(retrieved)
-            state = EpisodeState(
-                sample=sample,
-                skill_prompt=skill_prompt,
-                visible_evidence=self._default_visible_evidence(sample),
-            )
-            self._states.append(state)
-            observations.append(self._render_observation(state))
-        return observations
+        self._states = [EpisodeState(sample=sample) for sample in samples]
+        return [self._render_observation(state) for state in self._states]
 
     def step(self, actions: Sequence[str]) -> tuple[List[str], List[float], List[bool], List[Dict[str, Any]]]:
         if len(actions) != len(self._states):
@@ -63,11 +48,7 @@ class FakeNewsEnv:
         infos: List[Dict[str, Any]] = []
 
         for state, action in zip(self._states, actions):
-            parsed = parse_action(action, max_frame_index=max(0, len(state.sample.frames) - 1))
-            reward, info = self._apply_action(state, parsed)
-            if not state.done and state.step_index >= self.config.max_steps:
-                state.done = True
-                info.setdefault("termination_reason", "max_steps")
+            reward, info = self._apply_action(state, action)
             next_obs.append(self._render_observation(state))
             rewards.append(reward)
             dones.append(state.done)
@@ -77,8 +58,8 @@ class FakeNewsEnv:
     def success_evaluator(self) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
         for state in self._states:
-            label_correct = False
             predicted_label = None
+            label_correct = False
             if state.final_verdict is not None:
                 predicted_label = state.final_verdict["label"]
                 label_correct = predicted_label == state.sample.label
@@ -94,101 +75,109 @@ class FakeNewsEnv:
             )
         return results
 
+    def _current_stage(self, state: EpisodeState) -> str:
+        for stage in CONTROLLED_STAGES[:-1]:
+            if stage not in state.stage_outputs:
+                return stage
+        return "verdict"
+
     def _render_observation(self, state: EpisodeState) -> str:
-        visible = "\n\n".join(state.visible_evidence)
-        return build_step_prompt(
+        stage = self._current_stage(state)
+        if stage == "skill_application":
+            state.retrieved_skill_prompt = self._retrieve_skills_for_state(state)
+        return build_stage_prompt(
             sample=state.sample,
-            visible_evidence=visible,
-            inspected_items=state.inspected_items,
-            allowed_actions=self._allowed_action_types(state),
+            stage=stage,
+            stage_outputs=state.stage_outputs,
             step_index=min(state.step_index + 1, self.config.max_steps),
             max_steps=self.config.max_steps,
-            skill_prompt=state.skill_prompt,
+            skill_prompt=state.retrieved_skill_prompt if stage == "skill_application" else "",
         )
 
-    def _apply_action(self, state: EpisodeState, parsed: ParsedAction) -> tuple[float, Dict[str, Any]]:
+    def _retrieve_skills_for_state(self, state: EpisodeState) -> str:
+        if self.memory is None:
+            return ""
+        retrieval_query = "\n".join(
+            [
+                state.sample.task_description,
+                state.stage_outputs.get("visual_understanding", ""),
+                state.stage_outputs.get("claim_extraction", ""),
+                state.stage_outputs.get("consistency_check", ""),
+            ]
+        )
+        retrieved = self.memory.retrieve(task_description=retrieval_query)
+        return self.memory.format_for_prompt(retrieved)
+
+    def _apply_action(self, state: EpisodeState, action: str) -> tuple[float, Dict[str, Any]]:
         if state.done:
             return 0.0, {"is_action_valid": False, "error": "Episode already complete.", "won": False}
 
+        stage = self._current_stage(state)
         state.step_index += 1
-        if not parsed.is_valid:
-            state.invalid_action_count += 1
-            return self.config.invalid_action_penalty, {
-                "is_action_valid": False,
-                "error": parsed.error,
-                "won": False,
+
+        if stage == "verdict":
+            parsed = parse_action(action, max_frame_index=max(0, len(state.sample.frames) - 1))
+            if not parsed.is_valid or parsed.action_type != "verdict":
+                state.invalid_action_count += 1
+                if state.step_index >= self.config.max_steps:
+                    state.done = True
+                return self.config.invalid_action_penalty, {
+                    "is_action_valid": False,
+                    "error": parsed.error if not parsed.is_valid else "Verdict stage requires a valid <verdict> block.",
+                    "won": False,
+                    **({"termination_reason": "max_steps"} if state.done else {}),
+                }
+
+            state.final_verdict = parsed.payload
+            state.done = True
+            reward = self.config.correct_label_reward if parsed.payload["label"] == state.sample.label else self.config.wrong_label_penalty
+            return reward, {
+                "is_action_valid": True,
+                "predicted_label": parsed.payload["label"],
+                "won": parsed.payload["label"] == state.sample.label,
             }
 
-        allowed_actions = self._allowed_action_types(state)
-        if parsed.action_type not in allowed_actions:
+        normalized = self._normalize_stage_output(action, stage)
+        if not normalized:
             state.invalid_action_count += 1
+            if state.step_index >= self.config.max_steps:
+                state.done = True
             return self.config.invalid_action_penalty, {
                 "is_action_valid": False,
-                "error": f"Action '{parsed.action_type}' is not allowed now. Allowed action(s): {', '.join(allowed_actions)}.",
+                "error": f"{stage} stage requires non-empty output.",
                 "won": False,
+                **({"termination_reason": "max_steps"} if state.done else {}),
             }
 
-        if parsed.action_type in {"visual_understanding", "create", "check", "use_skill"}:
-            if state.inspected_items:
-                last_action_type = state.inspected_items[-1].split(":", 1)[0]
-                if last_action_type == parsed.action_type:
-                    state.invalid_action_count += 1
-                    return self.config.invalid_action_penalty, {
-                        "is_action_valid": False,
-                        "error": "Do not repeat the same action type on consecutive turns.",
-                        "won": False,
-                    }
-            content = parsed.payload["content"]
-            state.inspected_items.append(f"{parsed.action_type}: {content}")
+        state.stage_outputs[stage] = normalized
+        if state.step_index >= self.config.max_steps and self._current_stage(state) != "verdict":
+            state.done = True
             return 0.0, {
                 "is_action_valid": True,
-                "reasoning_action": parsed.action_type,
+                "stage": stage,
+                "reasoning_action": stage,
                 "won": False,
+                "termination_reason": "max_steps",
             }
+        return 0.0, {"is_action_valid": True, "stage": stage, "reasoning_action": stage, "won": False}
 
-        if self.config.require_evidence_before_verdict and not state.inspected_items:
-            state.invalid_action_count += 1
-            return self.config.invalid_action_penalty, {
-                "is_action_valid": False,
-                "error": "At least one reasoning action is required before verdict.",
-                "won": False,
-            }
+    def _normalize_stage_output(self, action: str, stage: str) -> str:
+        cleaned = action.strip().replace("<|im_end|>", "").strip()
+        if not cleaned:
+            return ""
 
-        state.final_verdict = parsed.payload
-        state.done = True
-        reward = self._score_verdict(state)
-        return reward, {
-            "is_action_valid": True,
-            "predicted_label": parsed.payload["label"],
-            "won": parsed.payload["label"] == state.sample.label,
-        }
+        expected_tag = {
+            "visual_understanding": "visual_understanding",
+            "claim_extraction": "create",
+            "consistency_check": "check",
+            "skill_application": "use_skill",
+        }[stage]
 
-    def _score_verdict(self, state: EpisodeState) -> float:
-        assert state.final_verdict is not None
-        label = state.final_verdict["label"]
-        return self.config.correct_label_reward if label == state.sample.label else self.config.wrong_label_penalty
-
-    def _default_visible_evidence(self, sample: FakeNewsSample) -> List[str]:
-        evidence = [f"[post_text]\n{sample.post_text}"]
-        if sample.transcript.strip():
-            evidence.append(f"[transcript]\n{sample.transcript}")
-        if sample.ocr_text.strip():
-            evidence.append(f"[ocr_text]\n{sample.ocr_text}")
-        if sample.frames:
-            evidence.append(f"[attached_frames]\n{len(sample.frames)} frame image(s) are attached directly to the model input.")
-        return evidence
-
-    @staticmethod
-    def _allowed_action_types(state: EpisodeState) -> List[str]:
-        history_types = [item.split(":", 1)[0] for item in state.inspected_items]
-        if not history_types:
-            return ["visual_understanding"]
-        if history_types == ["visual_understanding"]:
-            return ["create"]
-        if history_types == ["visual_understanding", "create"]:
-            return ["check"]
-        if history_types == ["visual_understanding", "create", "check"]:
-            return ["use_skill", "verdict"]
-        if history_types == ["visual_understanding", "create", "check", "use_skill"]:
-            return ["verdict"]
-        return ["verdict"]
+        parsed = parse_action(cleaned, max_frame_index=0)
+        if parsed.is_valid and parsed.action_type == expected_tag:
+            return str(parsed.payload["content"]).strip()
+        if parsed.is_valid:
+            return ""
+        if cleaned.startswith("<"):
+            return ""
+        return cleaned
