@@ -205,12 +205,20 @@ class FakeNewsEnv:
         if stage == "analyzer_report":
             visual = str(payload.get("visual") or payload.get("visual_understanding") or "").strip()
             claim = str(payload.get("claim") or payload.get("claim_extraction") or "").strip()
+            preliminary = str(
+                payload.get("preliminary_judgment")
+                or payload.get("initial_judgment")
+                or payload.get("judgment")
+                or ""
+            ).strip()
             need = str(payload.get("need") or payload.get("request") or payload.get("skill_request") or "").strip()
             lines = []
             if visual:
                 lines.append(f"Visual: {visual}")
             if claim:
                 lines.append(f"Claim: {claim}")
+            if preliminary:
+                lines.append(f"Preliminary judgment: {preliminary}")
             if need:
                 lines.append(f"Need: {need}")
             return "\n".join(lines).strip()

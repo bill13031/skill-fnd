@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
 from .agent import BaseFakeNewsAgent, HeuristicFakeNewsAgent
@@ -13,11 +13,7 @@ from .schema import FakeNewsSample
 @dataclass(slots=True)
 class EpisodeTrace:
     sample_id: str
-    observations: List[str]
-    actions: List[str]
-    rewards: List[float]
-    infos: List[Dict[str, object]]
-    agent_debug: List[Dict[str, object]]
+    steps: List[Dict[str, object]]
 
 
 class SFTDataBuilder:
@@ -147,19 +143,22 @@ class RolloutTrainer:
                     traces.append(
                         EpisodeTrace(
                             sample_id=samples[index].sample_id,
-                            observations=[],
-                            actions=[],
-                            rewards=[],
-                            infos=[],
-                            agent_debug=[],
+                            steps=[],
                         )
                     )
                 if active[index]:
-                    traces[index].observations.append(current_observations[index])
-                    traces[index].actions.append(action)
-                    traces[index].rewards.append(rewards[index])
-                    traces[index].infos.append(infos[index])
-                    traces[index].agent_debug.append(agent_debug_by_index[index])
+                    traces[index].steps.append(
+                        {
+                            "step": len(traces[index].steps) + 1,
+                            "role": infos[index].get("role"),
+                            "stage": infos[index].get("stage"),
+                            "prompt": current_observations[index],
+                            "model_generation": action,
+                            "reward": rewards[index],
+                            "info": infos[index],
+                            "agent_debug": agent_debug_by_index[index],
+                        }
+                    )
                     if infos[index].get("is_action_valid"):
                         stage = str(infos[index].get("stage", "")).strip()
                         if stage:
@@ -171,5 +170,11 @@ class RolloutTrainer:
         return {
             "metrics": metrics,
             "success": success,
-            "traces": [asdict(trace) for trace in traces],
+            "traces": [
+                {
+                    "sample_id": trace.sample_id,
+                    "steps": trace.steps,
+                }
+                for trace in traces
+            ],
         }

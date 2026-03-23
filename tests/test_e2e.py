@@ -23,8 +23,9 @@ def test_sft_builder_and_rollout_trainer_end_to_end():
     assert "unverified_f1" not in results["metrics"]
     assert "evidence_match_rate" not in results["metrics"]
     assert len(results["success"]) == len(samples)
-    assert results["traces"][0]["observations"]
-    assert results["traces"][0]["agent_debug"]
+    assert results["traces"][0]["steps"]
+    assert results["traces"][0]["steps"][0]["prompt"]
+    assert results["traces"][0]["steps"][0]["agent_debug"]
 
 
 def test_build_agent_heuristic_factory():
@@ -57,5 +58,5 @@ def test_rollout_trainer_forces_verdict_after_reasoning_limit():
     )
     results = trainer.run(samples)
 
-    assert results["traces"][0]["actions"][0].startswith("Visual:")
-    assert results["traces"][0]["actions"][2].startswith("<verdict>")
+    assert results["traces"][0]["steps"][0]["model_generation"].startswith("Visual:")
+    assert results["traces"][0]["steps"][2]["model_generation"].startswith("<verdict>")

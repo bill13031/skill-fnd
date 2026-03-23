@@ -53,7 +53,8 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
             action = (
                 "Visual: The frames show stylized or ambiguous imagery rather than verified documentary footage.\n"
                 "Claim: The post claims a concrete real-world event happened as shown in the video.\n"
-                "Need: Need a skill for judging whether themed imagery actually verifies an extraordinary factual claim."
+                "Preliminary judgment: likely fake because the imagery does not credibly verify the claim.\n"
+                "Need: Need a skill for judging whether themed imagery actually verifies an extraordinary factual claim using only the provided inputs."
             )
         elif current_stage == "worker_skill":
             action = "Skill: Topic-matched or stylized imagery does not verify an extraordinary real-world claim without documentary support."
