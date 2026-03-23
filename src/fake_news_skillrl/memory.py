@@ -60,13 +60,6 @@ class SkillsOnlyMemory:
     def format_for_prompt(self, retrieved_memories: Dict[str, Any]) -> str:
         sections: List[str] = []
 
-        general = retrieved_memories.get("general_skills", [])
-        if general:
-            lines = ["### General Principles"]
-            for skill in general:
-                lines.append(f"- {skill.get('title', '')}: {skill.get('principle', '')}")
-            sections.append("\n".join(lines))
-
         task_specific = retrieved_memories.get("task_specific_skills", [])
         if task_specific:
             task_type = str(retrieved_memories.get("task_type", "task")).replace("_", " ").title()
@@ -75,6 +68,13 @@ class SkillsOnlyMemory:
                 principle = skill.get("principle", "")
                 when = skill.get("when_to_apply", "")
                 lines.append(f"- {skill.get('title', '')}: {principle} When: {when}")
+            sections.append("\n".join(lines))
+
+        general = retrieved_memories.get("general_skills", [])
+        if general:
+            lines = ["### General Principles"]
+            for skill in general:
+                lines.append(f"- {skill.get('title', '')}: {skill.get('principle', '')}")
             sections.append("\n".join(lines))
 
         mistakes = retrieved_memories.get("mistakes_to_avoid", [])

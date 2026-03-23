@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
-from .agent import BaseFakeNewsAgent, HeuristicFakeNewsAgent
+from .agent import BaseFakeNewsAgent, HeuristicFakeNewsAgent, repair_verdict_output
 from .env import FakeNewsEnv
 from .metrics import compute_classification_metrics
 from .prompting import build_stage_prompt
@@ -121,13 +121,24 @@ class RolloutTrainer:
                     and len(completed) >= self.max_reasoning_steps_before_forced_verdict
                     and not action.startswith("<verdict>")
                 ):
-                    action = self._forced_verdict_agent._verdict_action(sample)
-                    agent_debug = {
-                        **agent_debug,
-                        "forced_verdict_used": True,
-                        "forced_verdict_action": action,
-                        "forced_verdict_reason": "reached_verdict_stage_without_valid_verdict",
-                    }
+                    repaired_action = repair_verdict_output(action)
+                    if repaired_action is not None:
+                        action = repaired_action
+                        agent_debug = {
+                            **agent_debug,
+                            "forced_verdict_used": False,
+                            "verdict_repair_used": True,
+                            "verdict_repair_action": repaired_action,
+                            "verdict_repair_reason": "wrapped_or_extracted_bare_json_verdict",
+                        }
+                    else:
+                        action = self._forced_verdict_agent._verdict_action(sample)
+                        agent_debug = {
+                            **agent_debug,
+                            "forced_verdict_used": True,
+                            "forced_verdict_action": action,
+                            "forced_verdict_reason": "reached_verdict_stage_without_repairable_valid_verdict",
+                        }
                 else:
                     agent_debug = {
                         **agent_debug,

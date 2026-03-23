@@ -79,6 +79,9 @@ def build_stage_prompt(
             + build_skill_section(skill_prompt)
             + "Return exactly one short plain-text line starting with 'Skill: '.\n"
             + "Focus on the rule that will most improve or correct the Analyzer's preliminary judgment in this case.\n"
+            + "Prefer a concrete verification principle over generic advice.\n"
+            + "If the Analyzer already suspects fake, prioritize rules about documentary proof, extraordinary claims, and why on-topic or stylized imagery is not enough.\n"
+            + "Do not suggest external search, outside records, or tools that are unavailable in this workflow.\n"
         )
 
     if stage == "verdict":

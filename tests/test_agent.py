@@ -1,4 +1,4 @@
-from fake_news_skillrl.agent import QwenVLAgent, select_inference_device
+from fake_news_skillrl.agent import QwenVLAgent, repair_verdict_output, select_inference_device
 from fake_news_skillrl.schema import FakeNewsSample, FrameRecord
 
 
@@ -63,3 +63,14 @@ def test_extract_first_complete_block_from_multi_action_output():
     )
     first_block = QwenVLAgent._extract_first_complete_block(text)
     assert first_block == "<create>State the main claim.</create>"
+
+
+def test_repair_bare_json_verdict_output():
+    text = (
+        '{"label":"fake","rationale":"The claim relies on stylized imagery rather than documentary proof."}'
+        "<|im_end|>\n<|endoftext|>"
+    )
+    repaired = repair_verdict_output(text)
+    assert repaired == (
+        '<verdict>{"label":"fake","rationale":"The claim relies on stylized imagery rather than documentary proof."}</verdict>'
+    )

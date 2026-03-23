@@ -21,6 +21,31 @@ def select_inference_device(cuda_available: bool) -> str:
     return "cuda" if cuda_available else "cpu"
 
 
+def _clean_generation_text(text: str) -> str:
+    return text.strip().replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
+
+
+def repair_verdict_output(text: str) -> str | None:
+    cleaned = _clean_generation_text(text)
+    if not cleaned:
+        return None
+    if cleaned.startswith("<verdict>") and cleaned.endswith("</verdict>"):
+        return cleaned
+    if cleaned.startswith("{") and cleaned.endswith("}"):
+        parsed = parse_action(f"<verdict>{cleaned}</verdict>", max_frame_index=0)
+        if parsed.is_valid:
+            return f"<verdict>{cleaned}</verdict>"
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = cleaned[start : end + 1].strip()
+        parsed = parse_action(f"<verdict>{candidate}</verdict>", max_frame_index=0)
+        if parsed.is_valid:
+            return f"<verdict>{candidate}</verdict>"
+    return None
+
+
 class BaseFakeNewsAgent(ABC):
     model_name: str
 
@@ -209,7 +234,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
         action = self._extract_stage_output(generated, sample, current_stage)
         if action is None:
             parse_failure_reason = self._explain_parse_failure(generated, sample)
-            invalid_action = generated.strip().replace("<|im_end|>", "").strip()
+            invalid_action = _clean_generation_text(generated)
             self.last_debug["selected_action"] = invalid_action
             self.last_debug["parse_failure_reason"] = parse_failure_reason
             if self.allow_heuristic_fallback:
@@ -296,7 +321,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
 
     @staticmethod
     def _extract_first_complete_block(text: str) -> str | None:
-        cleaned = text.strip().replace("<|im_end|>", "").strip()
+        cleaned = _clean_generation_text(text)
         if not cleaned:
             return None
         matches: List[tuple[int, str]] = []
@@ -312,8 +337,11 @@ class QwenVLAgent(BaseFakeNewsAgent):
     @staticmethod
     def _extract_stage_output(text: str, sample: FakeNewsSample, current_stage: str) -> str | None:
         if current_stage == "verdict":
-            return QwenVLAgent._extract_first_action(text, sample)
-        cleaned = text.strip().replace("<|im_end|>", "").strip()
+            direct = QwenVLAgent._extract_first_action(text, sample)
+            if direct is not None:
+                return direct
+            return repair_verdict_output(text)
+        cleaned = _clean_generation_text(text)
         if not cleaned:
             return None
         first_complete_block = QwenVLAgent._extract_first_complete_block(cleaned)
@@ -328,7 +356,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
     def _explain_parse_failure(text: str, sample: FakeNewsSample) -> str:
         candidates: Sequence[str] = text.splitlines() if "\n" in text else [text]
         max_frame_index = max(0, len(sample.frames) - 1)
-        cleaned = text.strip().replace("<|im_end|>", "").strip()
+        cleaned = _clean_generation_text(text)
         opening_tag_count = sum(cleaned.lower().count(tag) for tag in ("<create>", "<check>", "<use_skill>", "<verdict>"))
         if opening_tag_count > 1:
             first_complete_block = QwenVLAgent._extract_first_complete_block(cleaned)

@@ -40,6 +40,18 @@
         "title": "Separate caption from reality",
         "principle": "Treat the caption as the main claim being judged, not as proof that the claim is true.",
         "when_to_apply": "When the post caption makes a strong assertion."
+      },
+      {
+        "skill_id": "mc_002",
+        "title": "On-topic visuals are not proof",
+        "principle": "Visuals that merely depict the same subject as the caption do not verify that the claimed real-world event actually happened.",
+        "when_to_apply": "When the frames are thematically related to the claim but do not show documentary evidence."
+      },
+      {
+        "skill_id": "mc_003",
+        "title": "Extraordinary claims need documentary support",
+        "principle": "Extraordinary real-world claims should be treated as misleading when the post relies on stylized, composite, generic, or ambiguous imagery instead of credible documentary support.",
+        "when_to_apply": "When the caption makes an extraordinary claim and the visuals look illustrative, edited, or non-documentary."
       }
     ],
     "out_of_context": [
