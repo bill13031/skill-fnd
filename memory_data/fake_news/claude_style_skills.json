@@ -23,6 +23,18 @@
       "title": "Avoid metadata shortcuts",
       "principle": "Do not rely on hidden task labels, profile vibes, or source metadata shortcuts when deciding fake versus real.",
       "when_to_apply": "Whenever extra metadata could bias the judgment."
+    },
+    {
+      "skill_id": "gen_005",
+      "title": "Missing proof is not falsity",
+      "principle": "Do not label a claim false solely because the provided post package does not fully prove it. Distinguish weak in-package evidence from evidence that the claim is actually misleading or false.",
+      "when_to_apply": "When the post package is incomplete or only loosely connected to the claim."
+    },
+    {
+      "skill_id": "gen_006",
+      "title": "Use broader knowledge for public events",
+      "principle": "For historical, military, political, scientific, or otherwise public-event claims, use general world knowledge and plausibility reasoning in addition to the provided post inputs.",
+      "when_to_apply": "When the claim concerns older events or facts that may be known beyond the post itself."
     }
   ],
   "task_specific_skills": {
@@ -68,6 +80,12 @@
         "title": "Inspect visible source signals",
         "principle": "Use source claims that are explicitly visible in the post text, transcript, OCR, or frames rather than hidden metadata shortcuts.",
         "when_to_apply": "When authenticity depends on who the post claims is speaking or publishing."
+      },
+      {
+        "skill_id": "sc_002",
+        "title": "Public-event plausibility matters",
+        "principle": "For claims about governments, militaries, public institutions, or widely reported events, do not assume falsehood merely because the post itself is not self-verifying; weigh background plausibility and prior knowledge as well.",
+        "when_to_apply": "When the claim concerns state actors, historical incidents, or public events that may be known outside the post."
       }
     ],
     "temporal_inconsistency": [
@@ -97,6 +115,12 @@
       "description": "Ignoring archive or timestamp markers.",
       "why_it_happens": "Temporal clues are often small and easy to miss.",
       "how_to_avoid": "Inspect OCR and attached frames before issuing a verdict."
+    },
+    {
+      "mistake_id": "err_004",
+      "description": "Confusing missing in-package proof with falsehood.",
+      "why_it_happens": "The model over-relies on the local post package and treats incomplete evidence as proof the claim is fake.",
+      "how_to_avoid": "Use broader world knowledge and ask whether the claim is actually misleading, not just under-evidenced by this single post."
     }
   ]
 }

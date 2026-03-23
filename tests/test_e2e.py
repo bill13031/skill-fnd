@@ -1,4 +1,4 @@
-from fake_news_skillrl.agent import HeuristicFakeNewsAgent, build_agent
+from fake_news_skillrl.agent import AnalyzerAgent, HeuristicFakeNewsAgent, WorkerAgent, build_agent, build_agent_pair
 from fake_news_skillrl.dataset import load_normalized_samples
 from fake_news_skillrl.env import FakeNewsEnv
 from fake_news_skillrl.memory import SkillsOnlyMemory
@@ -31,6 +31,12 @@ def test_sft_builder_and_rollout_trainer_end_to_end():
 def test_build_agent_heuristic_factory():
     agent = build_agent(agent_type="heuristic")
     assert isinstance(agent, HeuristicFakeNewsAgent)
+
+
+def test_build_agent_pair_returns_explicit_roles():
+    analyzer_agent, worker_agent = build_agent_pair(agent_type="heuristic")
+    assert isinstance(analyzer_agent, AnalyzerAgent)
+    assert isinstance(worker_agent, WorkerAgent)
 
 
 class _LoopingAgent:

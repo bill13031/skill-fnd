@@ -11,7 +11,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from fake_news_skillrl.agent import build_agent
+from fake_news_skillrl.agent import build_agent_pair
 from fake_news_skillrl.dataset import load_normalized_samples
 from fake_news_skillrl.env import FakeNewsEnv, FakeNewsEnvConfig
 from fake_news_skillrl.memory import SkillsOnlyMemory
@@ -48,7 +48,7 @@ def main() -> None:
         samples = samples[: max(0, args.max_samples)]
     memory = SkillsOnlyMemory(args.skill_bank)
     env = FakeNewsEnv(config=FakeNewsEnvConfig(), memory=memory)
-    agent = build_agent(
+    analyzer_agent, worker_agent = build_agent_pair(
         agent_type=args.agent_type,
         model_name=args.model_name,
         max_new_tokens=args.max_new_tokens,
@@ -59,8 +59,8 @@ def main() -> None:
     )
     results = RolloutTrainer(
         env=env,
-        analyzer_agent=agent,
-        worker_agent=agent,
+        analyzer_agent=analyzer_agent,
+        worker_agent=worker_agent,
         max_reasoning_steps_before_forced_verdict=args.max_reasoning_steps_before_forced_verdict,
     ).run(samples)
     print(json.dumps(results, indent=2))

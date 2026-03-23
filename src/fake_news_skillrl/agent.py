@@ -63,6 +63,54 @@ class BaseFakeNewsAgent(ABC):
 
 
 @dataclass(slots=True)
+class AnalyzerAgent(BaseFakeNewsAgent):
+    backend: BaseFakeNewsAgent
+    model_name: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.model_name = f"analyzer::{self.backend.model_name}"
+
+    def next_action(
+        self,
+        sample: FakeNewsSample,
+        inspected_items: List[str],
+        observation: str,
+    ) -> str:
+        return self.backend.next_action(sample, inspected_items, observation)
+
+    def get_last_debug(self) -> Dict[str, Any]:
+        debug = getattr(self.backend, "get_last_debug", lambda: {})()
+        return {
+            **debug,
+            "agent_wrapper_role": "analyzer",
+        }
+
+
+@dataclass(slots=True)
+class WorkerAgent(BaseFakeNewsAgent):
+    backend: BaseFakeNewsAgent
+    model_name: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.model_name = f"worker::{self.backend.model_name}"
+
+    def next_action(
+        self,
+        sample: FakeNewsSample,
+        inspected_items: List[str],
+        observation: str,
+    ) -> str:
+        return self.backend.next_action(sample, inspected_items, observation)
+
+    def get_last_debug(self) -> Dict[str, Any]:
+        debug = getattr(self.backend, "get_last_debug", lambda: {})()
+        return {
+            **debug,
+            "agent_wrapper_role": "worker",
+        }
+
+
+@dataclass(slots=True)
 class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
     model_name: str = "heuristic-v1"
     last_debug: Dict[str, Any] = field(default_factory=dict, init=False, repr=False)
@@ -411,3 +459,26 @@ def build_agent(
             allow_heuristic_fallback=allow_heuristic_fallback,
         )
     raise ValueError(f"Unsupported agent type: {agent_type}")
+
+
+def build_agent_pair(
+    agent_type: str,
+    model_name: str | None = None,
+    max_new_tokens: int = 192,
+    temperature: float = 0.0,
+    repetition_penalty: float = 1.02,
+    trust_remote_code: bool = False,
+    attach_frames_first_step_only: bool = True,
+    allow_heuristic_fallback: bool = False,
+) -> tuple[AnalyzerAgent, WorkerAgent]:
+    backend = build_agent(
+        agent_type=agent_type,
+        model_name=model_name,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        repetition_penalty=repetition_penalty,
+        trust_remote_code=trust_remote_code,
+        attach_frames_first_step_only=attach_frames_first_step_only,
+        allow_heuristic_fallback=allow_heuristic_fallback,
+    )
+    return AnalyzerAgent(backend=backend), WorkerAgent(backend=backend)

@@ -58,6 +58,8 @@ def build_stage_prompt(
             "You are Analyzer.\n"
             "Read the post text and attached frames, then prepare a concise case report for your Worker teammate.\n"
             "Your job is to understand the post, identify the main claim, make a preliminary fake/real judgment, and explain what kind of skill would help most.\n"
+            "Use the provided inputs as primary evidence, but you may also use your own general world knowledge, historical knowledge, and common-sense reasoning when the claim concerns older or public events.\n"
+            "Do not treat missing proof inside the post package as automatic evidence that the claim is false.\n"
             "Do not give the final fake/real verdict yet.\n\n"
             + shared
             + "Write exactly four plain-text lines in this format:\n"
@@ -65,7 +67,7 @@ def build_stage_prompt(
             + "Claim: the main concrete factual claim the post makes.\n"
             + "Preliminary judgment: likely fake or likely real, with a short reason.\n"
             + "Need: what verification skill or principle would help judge this case more reliably using only the provided inputs.\n"
-            + "Keep each line short, concrete, and grounded in the provided inputs.\n"
+            + "Keep each line short, concrete, and grounded in the provided inputs plus any relevant general knowledge.\n"
         )
 
     if stage == "worker_skill":
@@ -81,6 +83,7 @@ def build_stage_prompt(
             + "Focus on the rule that will most improve or correct the Analyzer's preliminary judgment in this case.\n"
             + "Prefer a concrete verification principle over generic advice.\n"
             + "If the Analyzer already suspects fake, prioritize rules about documentary proof, extraordinary claims, and why on-topic or stylized imagery is not enough.\n"
+            + "If the Analyzer is relying too narrowly on the provided package, prioritize rules about using broader historical or public-event knowledge and not confusing incomplete in-package proof with falsehood.\n"
             + "Do not suggest external search, outside records, or tools that are unavailable in this workflow.\n"
         )
 
@@ -89,11 +92,14 @@ def build_stage_prompt(
             "You are Analyzer.\n"
             "Use your preliminary reasoning plus the Worker-provided skill to improve or confirm your judgment and decide whether the post is fake or real.\n"
             "An extraordinary factual claim is not verified just because the visuals are on-topic; stylized, composite, or generic imagery does not count as documentary proof.\n"
-            "If the post presents an extraordinary real-world claim without credible verification in the provided inputs, prefer fake.\n\n"
+            "Use the provided inputs as primary evidence, but also use your own general world knowledge, historical knowledge, and common-sense reasoning when relevant.\n"
+            "Do not label a claim fake solely because the post package does not fully prove it.\n"
+            "For historical, military, political, or otherwise public-event claims, distinguish between 'not fully verified by this post' and 'likely false or misleading'.\n"
+            "If the post presents an extraordinary real-world claim and the overall evidence plus background knowledge still points to weak credibility, prefer fake.\n\n"
             + shared
             + "Return exactly one final verdict block and nothing else.\n"
             + 'Format: <verdict>{"label":"fake|real","rationale":"..."}</verdict>\n'
-            + "Keep the rationale short, concrete, and grounded in the Analyzer report plus Worker skill.\n"
+            + "Keep the rationale short, concrete, and grounded in the Analyzer report, Worker skill, and any relevant background knowledge.\n"
         )
 
     raise ValueError(f"Unsupported controlled stage: {stage}")

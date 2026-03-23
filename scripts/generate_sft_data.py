@@ -10,7 +10,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from fake_news_skillrl.agent import build_agent
+from fake_news_skillrl.agent import build_agent_pair
 from fake_news_skillrl.dataset import load_normalized_samples
 from fake_news_skillrl.io_utils import dump_jsonl
 from fake_news_skillrl.trainer import SFTDataBuilder
@@ -29,7 +29,7 @@ def main() -> None:
     args = parser.parse_args()
 
     samples = load_normalized_samples(args.input)
-    agent = build_agent(
+    analyzer_agent, worker_agent = build_agent_pair(
         agent_type=args.agent_type,
         model_name=args.model_name,
         max_new_tokens=args.max_new_tokens,
@@ -37,7 +37,7 @@ def main() -> None:
         repetition_penalty=args.repetition_penalty,
         trust_remote_code=args.trust_remote_code,
     )
-    builder = SFTDataBuilder(analyzer_agent=agent, worker_agent=agent)
+    builder = SFTDataBuilder(analyzer_agent=analyzer_agent, worker_agent=worker_agent)
     rows = builder.build(samples)
     dump_jsonl(args.output, rows)
     print(f"Wrote {len(rows)} SFT rows to {Path(args.output)}")
