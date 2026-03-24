@@ -59,6 +59,28 @@ def infer_split(index: int, total: int) -> str:
     return "test"
 
 
+def extract_event_text(
+    post_text: str,
+    transcript: str = "",
+    ocr_text: str = "",
+    metadata_event: str = "",
+) -> tuple[str, str]:
+    prepared_event = str(metadata_event).strip()
+    if prepared_event:
+        return prepared_event, "metadata_event"
+
+    for candidate, source in (
+        (post_text, "post_text"),
+        (transcript, "transcript"),
+        (ocr_text, "ocr_text"),
+    ):
+        normalized = " ".join(str(candidate).split()).strip()
+        if normalized:
+            return normalized, source
+
+    return "", "unavailable"
+
+
 def extract_video_frames(
     video_path: str | Path,
     frames_output_dir: str | Path,
@@ -217,7 +239,12 @@ def normalize_fakett_file(
             extraction_reason = extraction_result.reason
         extraction_reasons[extraction_reason] = extraction_reasons.get(extraction_reason, 0) + 1
 
-        event = str(row.get("event", "")).strip()
+        event_text, event_source = extract_event_text(
+            post_text=str(row.get("description", "")).strip(),
+            transcript="",
+            ocr_text="",
+            metadata_event=str(row.get("event", "")).strip(),
+        )
         description = str(row.get("description", "")).strip()
         normalized_rows.append(
             {
@@ -225,11 +252,13 @@ def normalize_fakett_file(
                 "post_text": description,
                 "transcript": "",
                 "ocr_text": "",
+                "event_text": event_text,
                 "metadata": {
                     "platform": "fakett",
                     "video_id": video_id,
                     "video_path": str(video_path),
-                    "event": event,
+                    "event": event_text,
+                    "event_extraction_source": event_source,
                     "user_description": str(row.get("user_description", "")),
                     "user_certify": row.get("user_certify", 0),
                     "publish_time": row.get("publish_time"),

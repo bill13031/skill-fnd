@@ -139,10 +139,11 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
     ) -> str:
         current_stage = self._detect_stage(observation)
         if current_stage == "event_extraction":
-            action = (
-                "Visual: The frames show ambiguous or topic-matched imagery related to the post.\n"
-                "Event: The post reports a concrete real-world event and presents the visuals as relevant to that event."
-            )
+            event_text = sample.event_text.strip() or "The post reports a concrete real-world event."
+            action = f"Event: {event_text}"
+        elif current_stage == "frame_description":
+            frame_label = sample.frames[0].description.strip() if sample.frames else ""
+            action = f"Frame description: {frame_label or 'A frame from the post showing the main visible scene.'}"
         elif current_stage == "preliminary_analysis":
             action = (
                 "Preliminary reasoning: The extracted event makes a concrete factual claim whose credibility depends on whether the post provides trustworthy support rather than merely related imagery or framing.\n"
@@ -321,7 +322,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
         sample: FakeNewsSample,
         observation: str,
         inspected_items: List[str],
-        current_stage: str = "event_extraction",
+        current_stage: str = "preliminary_analysis",
     ) -> List[dict]:
         if current_stage == "verdict":
             response_rule = (

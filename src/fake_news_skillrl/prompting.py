@@ -6,7 +6,6 @@ from .schema import FakeNewsSample
 
 
 CONTROLLED_STAGES = [
-    "event_extraction",
     "preliminary_analysis",
     "worker_skill",
     "verdict",
@@ -30,21 +29,11 @@ def _post_inputs_block(sample: FakeNewsSample, include_frames: bool = True) -> s
     return "\n".join(lines)
 
 
-def _event_extraction_block(stage_outputs: dict[str, str]) -> str:
-    event_extraction = stage_outputs.get("event_extraction", "").strip()
-    if not event_extraction:
+def _saved_event_block(sample: FakeNewsSample) -> str:
+    event_text = sample.event_text.strip()
+    if not event_text:
         return ""
-    return f"## Event Extraction\n{event_extraction}\n\n"
-
-
-def _event_only_block(stage_outputs: dict[str, str]) -> str:
-    event_extraction = stage_outputs.get("event_extraction", "").strip()
-    if not event_extraction:
-        return ""
-    event_lines = [line for line in event_extraction.splitlines() if line.strip().lower().startswith("event:")]
-    if not event_lines:
-        return ""
-    return "## Extracted Event\n" + "\n".join(event_lines) + "\n\n"
+    return f"## Extracted Event\nEvent: {event_text}\n\n"
 
 
 def _preliminary_analysis_block(stage_outputs: dict[str, str]) -> str:
@@ -65,23 +54,14 @@ def _stage_header(stage: str, step_index: int, max_steps: int) -> str:
     return f"## Current Stage\n{stage} ({step_index} of {max_steps})\n\n"
 
 
-def _event_extraction_context(sample: FakeNewsSample, stage: str, step_index: int, max_steps: int) -> str:
-    return (
-        "## Post Information\n"
-        f"{_post_inputs_block(sample, include_frames=True)}\n\n"
-        + _stage_header(stage, step_index, max_steps)
-    )
-
-
 def _preliminary_analysis_context(
     sample: FakeNewsSample,
-    stage_outputs: dict[str, str],
     stage: str,
     step_index: int,
     max_steps: int,
 ) -> str:
     return (
-        _event_only_block(stage_outputs)
+        _saved_event_block(sample)
         + "## Post Context Reminder\n"
         f"{_post_inputs_block(sample, include_frames=False)}\n\n"
         + _stage_header(stage, step_index, max_steps)
@@ -89,6 +69,7 @@ def _preliminary_analysis_context(
 
 
 def _worker_skill_context(
+    sample: FakeNewsSample,
     stage_outputs: dict[str, str],
     stage: str,
     step_index: int,
@@ -96,7 +77,7 @@ def _worker_skill_context(
     skill_prompt: str,
 ) -> str:
     return (
-        _event_extraction_block(stage_outputs)
+        _saved_event_block(sample)
         + _preliminary_analysis_block(stage_outputs)
         + build_skill_section(skill_prompt)
         + _stage_header(stage, step_index, max_steps)
@@ -111,7 +92,7 @@ def _verdict_context(
     max_steps: int,
 ) -> str:
     return (
-        _event_extraction_block(stage_outputs)
+        _saved_event_block(sample)
         + _preliminary_analysis_block(stage_outputs)
         + _worker_skill_block(stage_outputs)
         + "## Post Context Reminder\n"
@@ -128,19 +109,6 @@ def build_stage_prompt(
     max_steps: int,
     skill_prompt: str = "",
 ) -> str:
-    if stage == "event_extraction":
-        return (
-            "You are inspecting a tiktok post.\n"
-            "Inspect the post text and attached frames, then extract the news event or factual incident the post is trying to report.\n"
-            "This stage is only for understanding and event extraction.\n\n"
-            + _event_extraction_context(sample, stage, step_index, max_steps)
-            + "Write exactly two plain-text lines in this format:\n"
-            + "Visual: what is visibly shown in the frames.\n"
-            + "Event: the specific real-world event, incident, or claim the post is reporting.\n"
-            + "Do not argue whether the claim is true, false, credible, or misleading in this stage.\n"
-            + "Keep both lines short, concrete, and grounded in the provided inputs.\n"
-        )
-
     if stage == "preliminary_analysis":
         return (
             "You are a professional fact-checker.\n"
@@ -149,7 +117,7 @@ def build_stage_prompt(
             "You may use the provided inputs as context, but do not treat them as automatically valid evidence.\n"
             "You may use your own general world knowledge, historical knowledge, and common-sense reasoning.\n"
             "Do not give the final verdict yet.\n\n"
-            + _preliminary_analysis_context(sample, stage_outputs, stage, step_index, max_steps)
+            + _preliminary_analysis_context(sample, stage, step_index, max_steps)
             + "Write exactly two plain-text lines in this format:\n"
             + "Preliminary reasoning: a short reasoning passage about whether the extracted event seems credible, doubtful, misleading, or fabricated.\n"
             + "Need: what verification skill or principle would significantly affect the conclusion, keep it short and concrete.\n"
@@ -161,7 +129,7 @@ def build_stage_prompt(
             "Read the extracted event and preliminary analysis, inspect the skills below, and select one short skill that will help the Analyzer fact-check this event.\n"
             "Prefer an existing retrieved skill when it fits. Otherwise create one short reusable skill.\n"
             "Do not decide fake or real yourself.\n\n"
-            + _worker_skill_context(stage_outputs, stage, step_index, max_steps, skill_prompt)
+            + _worker_skill_context(sample, stage_outputs, stage, step_index, max_steps, skill_prompt)
             + "Return exactly one short plain-text line starting with 'Skill: '.\n"
             + "Focus on the rule that will most improve the Analyzer's later fact-checking in this case.\n"
             + "Prefer a concrete verification principle over generic advice.\n"

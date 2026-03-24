@@ -28,6 +28,7 @@ class FakeNewsSample:
     post_text: str
     transcript: str
     ocr_text: str
+    event_text: str
     metadata: Dict[str, Any]
     frames: List[FrameRecord]
     label: Label
@@ -37,10 +38,12 @@ class FakeNewsSample:
 
     @property
     def task_description(self) -> str:
+        event_part = f" Extracted event: {self.event_text.strip()}" if self.event_text.strip() else ""
         return (
             "Review a short social-media video post and decide whether it contains misleading or non-factual content. "
             "Allow clearly playful, metaphorical, or exaggerated content to pass if it is not making a concrete misleading factual claim. "
             f"Post text: {self.post_text.strip()}"
+            f"{event_part}"
         )
 
 
@@ -83,6 +86,7 @@ def normalize_sample(raw: Dict[str, Any]) -> FakeNewsSample:
         post_text=str(raw["post_text"]),
         transcript=str(raw["transcript"]),
         ocr_text=str(raw["ocr_text"]),
+        event_text=str(raw.get("event_text", raw.get("metadata", {}).get("event", ""))),
         metadata=dict(raw["metadata"]),
         frames=frames,
         label=label,  # type: ignore[arg-type]

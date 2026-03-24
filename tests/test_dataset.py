@@ -3,6 +3,7 @@ from pathlib import Path
 from fake_news_skillrl.dataset import (
     _relative_to_project_root,
     _select_frame_positions_from_fps,
+    extract_event_text,
     infer_split,
     load_normalized_samples,
     normalize_records,
@@ -28,6 +29,7 @@ def test_normalize_records_round_trip():
     normalized = normalize_records(rows)
     assert normalized[0]["label"] == "fake"
     assert normalized[0]["frames"][0]["path"] == "a.jpg"
+    assert normalized[0]["event_text"] == ""
 
 
 def test_load_smoke_samples():
@@ -76,6 +78,17 @@ def test_relative_to_project_root_returns_relative_path_inside_repo():
     repo_root = Path.cwd()
     inside_repo = repo_root / "data" / "frames" / "fakett" / "abc" / "0000.jpg"
     assert _relative_to_project_root(inside_repo) == "data/frames/fakett/abc/0000.jpg"
+
+
+def test_extract_event_text_prefers_metadata_event():
+    event_text, source = extract_event_text(
+        post_text="post fallback",
+        transcript="",
+        ocr_text="",
+        metadata_event="official event summary",
+    )
+    assert event_text == "official event summary"
+    assert source == "metadata_event"
 
 
 def test_prepare_dataset_prints_frame_extraction_summary(capsys):
