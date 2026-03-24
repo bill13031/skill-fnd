@@ -6,7 +6,8 @@ from .schema import FakeNewsSample
 
 
 CONTROLLED_STAGES = [
-    "analyzer_report",
+    "event_extraction",
+    "preliminary_analysis",
     "worker_skill",
     "verdict",
 ]
@@ -18,23 +19,105 @@ def build_skill_section(skill_prompt: str) -> str:
     return f"## Retrieved Skills\n{skill_prompt.strip()}\n\n"
 
 
-def _inputs_block(sample: FakeNewsSample) -> str:
+def _post_inputs_block(sample: FakeNewsSample, include_frames: bool = True) -> str:
     lines = [f"Post text: {sample.post_text}"]
     if sample.transcript.strip():
         lines.append(f"Transcript: {sample.transcript}")
     if sample.ocr_text.strip():
         lines.append(f"OCR text: {sample.ocr_text}")
-    lines.append(f"Attached frames: {len(sample.frames)}")
+    if include_frames:
+        lines.append(f"Attached frames: {len(sample.frames)}")
     return "\n".join(lines)
 
 
-def _history_block(stage_outputs: dict[str, str]) -> str:
-    lines: List[str] = []
-    if stage_outputs.get("analyzer_report"):
-        lines.append(f"Analyzer report:\n{stage_outputs['analyzer_report']}")
-    if stage_outputs.get("worker_skill"):
-        lines.append(f"Worker skill:\n{stage_outputs['worker_skill']}")
-    return "\n\n".join(lines) if lines else "None yet."
+def _event_extraction_block(stage_outputs: dict[str, str]) -> str:
+    event_extraction = stage_outputs.get("event_extraction", "").strip()
+    if not event_extraction:
+        return ""
+    return f"## Event Extraction\n{event_extraction}\n\n"
+
+
+def _event_only_block(stage_outputs: dict[str, str]) -> str:
+    event_extraction = stage_outputs.get("event_extraction", "").strip()
+    if not event_extraction:
+        return ""
+    event_lines = [line for line in event_extraction.splitlines() if line.strip().lower().startswith("event:")]
+    if not event_lines:
+        return ""
+    return "## Extracted Event\n" + "\n".join(event_lines) + "\n\n"
+
+
+def _preliminary_analysis_block(stage_outputs: dict[str, str]) -> str:
+    preliminary_analysis = stage_outputs.get("preliminary_analysis", "").strip()
+    if not preliminary_analysis:
+        return ""
+    return f"## Preliminary Analysis\n{preliminary_analysis}\n\n"
+
+
+def _worker_skill_block(stage_outputs: dict[str, str]) -> str:
+    worker_skill = stage_outputs.get("worker_skill", "").strip()
+    if not worker_skill:
+        return ""
+    return f"## Worker Skill\n{worker_skill}\n\n"
+
+
+def _stage_header(stage: str, step_index: int, max_steps: int) -> str:
+    return f"## Current Stage\n{stage} ({step_index} of {max_steps})\n\n"
+
+
+def _event_extraction_context(sample: FakeNewsSample, stage: str, step_index: int, max_steps: int) -> str:
+    return (
+        "## Post Information\n"
+        f"{_post_inputs_block(sample, include_frames=True)}\n\n"
+        + _stage_header(stage, step_index, max_steps)
+    )
+
+
+def _preliminary_analysis_context(
+    sample: FakeNewsSample,
+    stage_outputs: dict[str, str],
+    stage: str,
+    step_index: int,
+    max_steps: int,
+) -> str:
+    return (
+        _event_only_block(stage_outputs)
+        + "## Post Context Reminder\n"
+        f"{_post_inputs_block(sample, include_frames=False)}\n\n"
+        + _stage_header(stage, step_index, max_steps)
+    )
+
+
+def _worker_skill_context(
+    stage_outputs: dict[str, str],
+    stage: str,
+    step_index: int,
+    max_steps: int,
+    skill_prompt: str,
+) -> str:
+    return (
+        _event_extraction_block(stage_outputs)
+        + _preliminary_analysis_block(stage_outputs)
+        + build_skill_section(skill_prompt)
+        + _stage_header(stage, step_index, max_steps)
+    )
+
+
+def _verdict_context(
+    sample: FakeNewsSample,
+    stage_outputs: dict[str, str],
+    stage: str,
+    step_index: int,
+    max_steps: int,
+) -> str:
+    return (
+        _event_extraction_block(stage_outputs)
+        + _preliminary_analysis_block(stage_outputs)
+        + _worker_skill_block(stage_outputs)
+        + "## Post Context Reminder\n"
+        f"{_post_inputs_block(sample, include_frames=False)}\n\n"
+        + _stage_header(stage, step_index, max_steps)
+    )
 
 
 def build_stage_prompt(
@@ -45,58 +128,59 @@ def build_stage_prompt(
     max_steps: int,
     skill_prompt: str = "",
 ) -> str:
-    shared = (
-        "## Post Information\n"
-        f"{_inputs_block(sample)}\n\n"
-        "## Collaboration History\n"
-        f"{_history_block(stage_outputs)}\n\n"
-        f"## Current Stage\n{stage} ({step_index} of {max_steps})\n\n"
-    )
-
-    if stage == "analyzer_report":
+    if stage == "event_extraction":
         return (
-            "You are a short-video fact-checker.\n"
-            "Read the post text and attached frames to determine whether the content is authentic and creadible (real) or fake and misleading (fake), then prepare a concise case report for your assistant teammate.\n"
-            "You need to understand the post, identify the main claim, make a preliminary fake/real judgment, and explain what kind of skill would help most.\n"
-            "You may use your own general world knowledge, historical knowledge, and common-sense reasoning.\n"
-            "Do not treat missing proof inside the post package as automatic evidence that the claim is false.\n"
-            "Do not give the final fake/real verdict yet.\n\n"
-            + shared
-            + "Write exactly four plain-text lines in this format:\n"
+            "You are inspecting a tiktok post.\n"
+            "Inspect the post text and attached frames, then extract the news event or factual incident the post is trying to report.\n"
+            "This stage is only for understanding and event extraction.\n\n"
+            + _event_extraction_context(sample, stage, step_index, max_steps)
+            + "Write exactly two plain-text lines in this format:\n"
             + "Visual: what is visibly shown in the frames.\n"
-            + "Claim: the main concrete factual claim the post makes.\n"
-            + "Preliminary reasoning: a reasoning passage and conclusion.\n"
+            + "Event: the specific real-world event, incident, or claim the post is reporting.\n"
+            + "Do not argue whether the claim is true, false, credible, or misleading in this stage.\n"
+            + "Keep both lines short, concrete, and grounded in the provided inputs.\n"
+        )
+
+    if stage == "preliminary_analysis":
+        return (
+            "You are a professional fact-checker.\n"
+            "Think and make a preliminary fact-checking assessment of the given event.\n"
+            "At this stage, reason about the extracted event itself rather than treating the raw post text or visuals as proof.\n"
+            "You may use the provided inputs as context, but do not treat them as automatically valid evidence.\n"
+            "You may use your own general world knowledge, historical knowledge, and common-sense reasoning.\n"
+            "Do not give the final verdict yet.\n\n"
+            + _preliminary_analysis_context(sample, stage_outputs, stage, step_index, max_steps)
+            + "Write exactly two plain-text lines in this format:\n"
+            + "Preliminary reasoning: a short reasoning passage about whether the extracted event seems credible, doubtful, misleading, or fabricated.\n"
             + "Need: what verification skill or principle would significantly affect the conclusion, keep it short and concrete.\n"
         )
 
     if stage == "worker_skill":
         return (
-            "You are an assistant of your fact-cheker teammate.\n"
-            "Your job is skill management for the fact-cheker teammate.\n"
-            "Read the report and need from the fact-checker, inspect the skills below, and select one short skill that you think the fact-checker should use.\n"
+            "Your job is skill support for the teammate.\n"
+            "Read the extracted event and preliminary analysis, inspect the skills below, and select one short skill that will help the Analyzer fact-check this event.\n"
             "Prefer an existing retrieved skill when it fits. Otherwise create one short reusable skill.\n"
             "Do not decide fake or real yourself.\n\n"
-            + shared
-            + build_skill_section(skill_prompt)
+            + _worker_skill_context(stage_outputs, stage, step_index, max_steps, skill_prompt)
             + "Return exactly one short plain-text line starting with 'Skill: '.\n"
-            + "Focus on the rule that will most improve or correct the fact-checker's preliminary judgment in this case.\n"
+            + "Focus on the rule that will most improve the Analyzer's later fact-checking in this case.\n"
             + "Prefer a concrete verification principle over generic advice.\n"
             + "Do not suggest external search, outside records, or tools that are unavailable in this workflow.\n"
         )
 
     if stage == "verdict":
         return (
-            "You are a short-video fact-checker.\n"
-            "Use your preliminary reasoning plus the provided skill to improve or confirm your reasoning and judgment.\n"
+            "You are a professional fact-checker.\n"
+            "Use the extracted event, your preliminary analysis, and the provided skill to fact-check the post and decide whether it is fake or real.\n"
             "An extraordinary factual claim is not verified just because the visuals are on-topic; stylized, composite, or generic imagery does not count as documentary proof.\n"
             "Use the provided inputs as primary evidence, but also use your own general world knowledge, historical knowledge, and common-sense reasoning when relevant.\n"
             "Do not label a claim fake solely because the post package does not fully prove it.\n"
             "For historical, military, political, or otherwise public-event claims, distinguish between 'not fully verified by this post' and 'likely false or misleading'.\n"
             "If the post presents an extraordinary real-world claim and the overall evidence plus background knowledge still points to weak credibility, prefer fake.\n\n"
-            + shared
+            + _verdict_context(sample, stage_outputs, stage, step_index, max_steps)
             + "Return exactly one final verdict block and nothing else.\n"
             + 'Format: <verdict>{"label":"fake|real","rationale":"..."}</verdict>\n'
-            + "Keep the rationale short, concrete, and grounded in the Analyzer report, Worker skill, and any relevant background knowledge.\n"
+            + "Keep the rationale short, concrete, and grounded in the extracted event, preliminary analysis, Worker skill, and any relevant background knowledge.\n"
         )
 
     raise ValueError(f"Unsupported controlled stage: {stage}")

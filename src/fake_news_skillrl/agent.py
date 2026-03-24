@@ -138,12 +138,15 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
         observation: str,
     ) -> str:
         current_stage = self._detect_stage(observation)
-        if current_stage == "analyzer_report":
+        if current_stage == "event_extraction":
             action = (
-                "Visual: The frames show stylized or ambiguous imagery rather than verified documentary footage.\n"
-                "Claim: The post claims a concrete real-world event happened as shown in the video.\n"
-                "Preliminary judgment: likely fake because the imagery does not credibly verify the claim.\n"
-                "Need: Need a skill for judging whether themed imagery actually verifies an extraordinary factual claim using only the provided inputs."
+                "Visual: The frames show ambiguous or topic-matched imagery related to the post.\n"
+                "Event: The post reports a concrete real-world event and presents the visuals as relevant to that event."
+            )
+        elif current_stage == "preliminary_analysis":
+            action = (
+                "Preliminary reasoning: The extracted event makes a concrete factual claim whose credibility depends on whether the post provides trustworthy support rather than merely related imagery or framing.\n"
+                "Need: Need a verification skill that helps judge whether the extracted event is credibly supported or misleading."
             )
         elif current_stage == "worker_skill":
             action = "Skill: Topic-matched or stylized imagery does not verify an extraordinary real-world claim without documentary support."
@@ -318,7 +321,7 @@ class QwenVLAgent(BaseFakeNewsAgent):
         sample: FakeNewsSample,
         observation: str,
         inspected_items: List[str],
-        current_stage: str = "analyzer_report",
+        current_stage: str = "event_extraction",
     ) -> List[dict]:
         if current_stage == "verdict":
             response_rule = (

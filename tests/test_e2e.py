@@ -47,7 +47,11 @@ class _LoopingAgent:
         if not inspected_items:
             return (
                 "Visual: Generic imagery.\n"
-                "Claim: A concrete claim is made.\n"
+                "Event: The post reports a concrete news event."
+            )
+        if inspected_items == ["event_extraction"]:
+            return (
+                "Preliminary reasoning: The extracted event needs a stronger credibility check before final judgment.\n"
                 "Need: Need a verification skill."
             )
         return "still not a verdict"
@@ -65,4 +69,4 @@ def test_rollout_trainer_forces_verdict_after_reasoning_limit():
     results = trainer.run(samples)
 
     assert results["traces"][0]["steps"][0]["model_generation"].startswith("Visual:")
-    assert results["traces"][0]["steps"][2]["model_generation"].startswith("<verdict>")
+    assert results["traces"][0]["steps"][3]["model_generation"].startswith("<verdict>")

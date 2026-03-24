@@ -33,25 +33,37 @@ class SFTDataBuilder:
 
             analyzer_observation = build_stage_prompt(
                 sample=sample,
-                stage="analyzer_report",
+                stage="event_extraction",
                 stage_outputs=stage_outputs,
                 step_index=1,
-                max_steps=3,
+                max_steps=4,
                 skill_prompt="",
             ) + "\n## Current Role\nanalyzer\n"
-            analyzer_output = self.analyzer_agent.next_action(sample, [], analyzer_observation)
-            trajectory.append({"role": "assistant", "content": analyzer_output})
-            stage_outputs["analyzer_report"] = analyzer_output
+            event_output = self.analyzer_agent.next_action(sample, [], analyzer_observation)
+            trajectory.append({"role": "assistant", "content": event_output})
+            stage_outputs["event_extraction"] = event_output
+
+            preliminary_observation = build_stage_prompt(
+                sample=sample,
+                stage="preliminary_analysis",
+                stage_outputs=stage_outputs,
+                step_index=2,
+                max_steps=4,
+                skill_prompt="",
+            ) + "\n## Current Role\nanalyzer\n"
+            preliminary_output = self.analyzer_agent.next_action(sample, ["event_extraction"], preliminary_observation)
+            trajectory.append({"role": "assistant", "content": preliminary_output})
+            stage_outputs["preliminary_analysis"] = preliminary_output
 
             worker_observation = build_stage_prompt(
                 sample=sample,
                 stage="worker_skill",
                 stage_outputs=stage_outputs,
-                step_index=2,
-                max_steps=3,
+                step_index=3,
+                max_steps=4,
                 skill_prompt="",
             ) + "\n## Current Role\nworker\n"
-            worker_output = self.worker_agent.next_action(sample, ["analyzer_report"], worker_observation)
+            worker_output = self.worker_agent.next_action(sample, ["event_extraction", "preliminary_analysis"], worker_observation)
             trajectory.append({"role": "assistant", "content": worker_output})
             stage_outputs["worker_skill"] = worker_output
 
@@ -59,11 +71,15 @@ class SFTDataBuilder:
                 sample=sample,
                 stage="verdict",
                 stage_outputs=stage_outputs,
-                step_index=3,
-                max_steps=3,
+                step_index=4,
+                max_steps=4,
                 skill_prompt="",
             ) + "\n## Current Role\nanalyzer\n"
-            verdict_output = self.analyzer_agent.next_action(sample, ["analyzer_report", "worker_skill"], verdict_observation)
+            verdict_output = self.analyzer_agent.next_action(
+                sample,
+                ["event_extraction", "preliminary_analysis", "worker_skill"],
+                verdict_observation,
+            )
             trajectory.append({"role": "assistant", "content": verdict_output})
 
             rows.append(

@@ -12,7 +12,7 @@ from .schema import FakeNewsSample
 
 @dataclass(slots=True)
 class FakeNewsEnvConfig:
-    max_steps: int = 3
+    max_steps: int = 4
     invalid_action_penalty: float = -0.2
     correct_label_reward: float = 1.0
     wrong_label_penalty: float = -1.0
@@ -105,7 +105,8 @@ class FakeNewsEnv:
         retrieval_query = "\n".join(
             [
                 state.sample.task_description,
-                state.stage_outputs.get("analyzer_report", ""),
+                state.stage_outputs.get("event_extraction", ""),
+                state.stage_outputs.get("preliminary_analysis", ""),
             ]
         )
         retrieved = self.memory.retrieve(task_description=retrieval_query)
@@ -194,7 +195,7 @@ class FakeNewsEnv:
                 if normalized:
                     return normalized
 
-        for prefix in ("analyzer_report:", "worker_skill:", "visual_understanding:", "skill:"):
+        for prefix in ("event_extraction:", "preliminary_analysis:", "worker_skill:", "visual_understanding:", "skill:"):
             if cleaned.lower().startswith(prefix):
                 cleaned = cleaned[len(prefix):].strip()
                 break
@@ -202,23 +203,32 @@ class FakeNewsEnv:
 
     @staticmethod
     def _normalize_json_stage_output(payload: Dict[str, Any], stage: str) -> str:
-        if stage == "analyzer_report":
+        if stage == "event_extraction":
             visual = str(payload.get("visual") or payload.get("visual_understanding") or "").strip()
-            claim = str(payload.get("claim") or payload.get("claim_extraction") or "").strip()
-            preliminary = str(
-                payload.get("preliminary_judgment")
-                or payload.get("initial_judgment")
-                or payload.get("judgment")
+            event = str(
+                payload.get("event")
+                or payload.get("claim")
+                or payload.get("claim_extraction")
+                or payload.get("news_event")
+                or ""
+            ).strip()
+            lines = []
+            if visual:
+                lines.append(f"Visual: {visual}")
+            if event:
+                lines.append(f"Event: {event}")
+            return "\n".join(lines).strip()
+        if stage == "preliminary_analysis":
+            reasoning = str(
+                payload.get("preliminary_reasoning")
+                or payload.get("reasoning")
+                or payload.get("analysis")
                 or ""
             ).strip()
             need = str(payload.get("need") or payload.get("request") or payload.get("skill_request") or "").strip()
             lines = []
-            if visual:
-                lines.append(f"Visual: {visual}")
-            if claim:
-                lines.append(f"Claim: {claim}")
-            if preliminary:
-                lines.append(f"Preliminary judgment: {preliminary}")
+            if reasoning:
+                lines.append(f"Preliminary reasoning: {reasoning}")
             if need:
                 lines.append(f"Need: {need}")
             return "\n".join(lines).strip()
