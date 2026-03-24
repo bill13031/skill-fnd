@@ -22,7 +22,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run a lightweight RL-style rollout over fake-news samples.")
     parser.add_argument("--input", required=True, help="Normalized JSONL input path.")
     parser.add_argument("--skill-bank", required=True, help="Path to skill bank JSON.")
-    parser.add_argument("--agent-type", default="heuristic", choices=["heuristic", "qwen_vl", "transformers"])
+    parser.add_argument("--agent-type", default="heuristic", choices=["heuristic", "qwen_vl", "transformers", "openai_sdk", "aliyun_sdk"])
     parser.add_argument("--model-name", default=None, help="Local or HF model name for the VL agent.")
     parser.add_argument("--max-new-tokens", type=int, default=192)
     parser.add_argument("--temperature", type=float, default=0.0)

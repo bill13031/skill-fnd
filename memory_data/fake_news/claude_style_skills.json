@@ -35,6 +35,12 @@
       "title": "Use broader knowledge for public events",
       "principle": "For historical, military, political, scientific, or otherwise public-event claims, use general world knowledge and plausibility reasoning in addition to the provided post inputs.",
       "when_to_apply": "When the claim concerns older events or facts that may be known beyond the post itself."
+    },
+    {
+      "skill_id": "gen_007",
+      "title": "Web search for public corroboration",
+      "principle": "When the local post package is insufficient for a historical or public-event claim, use a focused DuckDuckGo search to look for corroboration from reporting, institutions, or archival sources before treating the claim as false.",
+      "when_to_apply": "When the claim is about a public event and the post package alone cannot settle whether it is likely real or fake."
     }
   ],
   "task_specific_skills": {
@@ -86,6 +92,12 @@
         "title": "Public-event plausibility matters",
         "principle": "For claims about governments, militaries, public institutions, or widely reported events, do not assume falsehood merely because the post itself is not self-verifying; weigh background plausibility and prior knowledge as well.",
         "when_to_apply": "When the claim concerns state actors, historical incidents, or public events that may be known outside the post."
+      },
+      {
+        "skill_id": "sc_003",
+        "title": "DuckDuckGo corroboration pass",
+        "principle": "Run a targeted DuckDuckGo search for the central claim, named entities, dates, and organizations to check whether public reporting or official statements support the event.",
+        "when_to_apply": "When a claim names organizations, dates, platforms, or public incidents that should leave a searchable trace."
       }
     ],
     "temporal_inconsistency": [
@@ -121,6 +133,12 @@
       "description": "Confusing missing in-package proof with falsehood.",
       "why_it_happens": "The model over-relies on the local post package and treats incomplete evidence as proof the claim is fake.",
       "how_to_avoid": "Use broader world knowledge and ask whether the claim is actually misleading, not just under-evidenced by this single post."
+    },
+    {
+      "mistake_id": "err_005",
+      "description": "Skipping a web corroboration check when the claim is about a searchable public event.",
+      "why_it_happens": "The system either trusts the post package too much or rejects the claim too quickly without looking for obvious public traces.",
+      "how_to_avoid": "Use a targeted DuckDuckGo search for public-event, historical, military, or institutional claims when local evidence is insufficient."
     }
   ]
 }

@@ -94,6 +94,8 @@ Template retrieval is implemented first. Embedding retrieval is left as a future
 
 Skills are no longer injected at reset. They are retrieved dynamically only when the episode reaches the `worker_skill` stage.
 
+The repo now also includes a small DuckDuckGo utility in [web_search.py](/home/yang/SkillFND/fake-news-skillrl/src/fake_news_skillrl/web_search.py) so `web_search`-style skills can be grounded in a concrete search backend when you decide to wire search into the workflow.
+
 ## Quick Start
 
 Create normalized smoke-test data:
@@ -113,12 +115,14 @@ python3 scripts/prepare_dataset.py \
   --output data/normalized/samples.normalized.jsonl \
   --video-dir ~/datasets/fakett/video \
   --frames-dir data/frames/fakett \
-  --num-frames 4
+  --fps 2 \
+  --max-frames 16
 ```
 
 Notes:
 
 - If OpenCV is unavailable or frame extraction fails, the normalized rows will still be written, but `frames` may be empty and `metadata.frame_extraction_status` will indicate that.
+- Frame extraction now samples by time using `--fps` and caps total saved frames with `--max-frames`. Frames are written into `frames-dir/<sample_id>/`.
 - Fakett normalization currently keeps extra metadata for storage, but the model-facing prompt does not expose metadata or frame descriptions.
 
 Generate SFT trajectories:

@@ -55,42 +55,39 @@ def build_stage_prompt(
 
     if stage == "analyzer_report":
         return (
-            "You are Analyzer.\n"
-            "Read the post text and attached frames, then prepare a concise case report for your Worker teammate.\n"
-            "Your job is to understand the post, identify the main claim, make a preliminary fake/real judgment, and explain what kind of skill would help most.\n"
-            "Use the provided inputs as primary evidence, but you may also use your own general world knowledge, historical knowledge, and common-sense reasoning when the claim concerns older or public events.\n"
+            "You are a short-video fact-checker.\n"
+            "Read the post text and attached frames to determine whether the content is authentic and creadible (real) or fake and misleading (fake), then prepare a concise case report for your assistant teammate.\n"
+            "You need to understand the post, identify the main claim, make a preliminary fake/real judgment, and explain what kind of skill would help most.\n"
+            "You may use your own general world knowledge, historical knowledge, and common-sense reasoning.\n"
             "Do not treat missing proof inside the post package as automatic evidence that the claim is false.\n"
             "Do not give the final fake/real verdict yet.\n\n"
             + shared
             + "Write exactly four plain-text lines in this format:\n"
             + "Visual: what is visibly shown in the frames.\n"
             + "Claim: the main concrete factual claim the post makes.\n"
-            + "Preliminary judgment: likely fake or likely real, with a short reason.\n"
-            + "Need: what verification skill or principle would help judge this case more reliably using only the provided inputs.\n"
-            + "Keep each line short, concrete, and grounded in the provided inputs plus any relevant general knowledge.\n"
+            + "Preliminary reasoning: a reasoning passage and conclusion.\n"
+            + "Need: what verification skill or principle would significantly affect the conclusion, keep it short and concrete.\n"
         )
 
     if stage == "worker_skill":
         return (
-            "You are Worker.\n"
-            "Your job is skill management for the Analyzer teammate.\n"
-            "Read the Analyzer report, including the preliminary judgment, inspect the retrieved skills below, and return one short skill the Analyzer should use.\n"
+            "You are an assistant of your fact-cheker teammate.\n"
+            "Your job is skill management for the fact-cheker teammate.\n"
+            "Read the report and need from the fact-checker, inspect the skills below, and select one short skill that you think the fact-checker should use.\n"
             "Prefer an existing retrieved skill when it fits. Otherwise create one short reusable skill.\n"
             "Do not decide fake or real yourself.\n\n"
             + shared
             + build_skill_section(skill_prompt)
             + "Return exactly one short plain-text line starting with 'Skill: '.\n"
-            + "Focus on the rule that will most improve or correct the Analyzer's preliminary judgment in this case.\n"
+            + "Focus on the rule that will most improve or correct the fact-checker's preliminary judgment in this case.\n"
             + "Prefer a concrete verification principle over generic advice.\n"
-            + "If the Analyzer already suspects fake, prioritize rules about documentary proof, extraordinary claims, and why on-topic or stylized imagery is not enough.\n"
-            + "If the Analyzer is relying too narrowly on the provided package, prioritize rules about using broader historical or public-event knowledge and not confusing incomplete in-package proof with falsehood.\n"
             + "Do not suggest external search, outside records, or tools that are unavailable in this workflow.\n"
         )
 
     if stage == "verdict":
         return (
-            "You are Analyzer.\n"
-            "Use your preliminary reasoning plus the Worker-provided skill to improve or confirm your judgment and decide whether the post is fake or real.\n"
+            "You are a short-video fact-checker.\n"
+            "Use your preliminary reasoning plus the provided skill to improve or confirm your reasoning and judgment.\n"
             "An extraordinary factual claim is not verified just because the visuals are on-topic; stylized, composite, or generic imagery does not count as documentary proof.\n"
             "Use the provided inputs as primary evidence, but also use your own general world knowledge, historical knowledge, and common-sense reasoning when relevant.\n"
             "Do not label a claim fake solely because the post package does not fully prove it.\n"
