@@ -28,12 +28,6 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--repetition-penalty", type=float, default=1.02)
     parser.add_argument(
-        "--attach-frames-first-step-only",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Attach frame images only on the first reasoning step for VL agents.",
-    )
-    parser.add_argument(
         "--max-reasoning-steps-before-forced-verdict",
         type=int,
         default=2,
@@ -52,7 +46,7 @@ def main() -> None:
         temperature=args.temperature,
         repetition_penalty=args.repetition_penalty,
         trust_remote_code=args.trust_remote_code,
-        attach_frames_first_step_only=args.attach_frames_first_step_only,
+        attach_frames_first_step_only=False,
     )
     trainer = RolloutTrainer(
         env=env,

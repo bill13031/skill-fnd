@@ -143,7 +143,11 @@ class HeuristicFakeNewsAgent(BaseFakeNewsAgent):
             action = f"Event: {event_text}"
         elif current_stage == "frame_description":
             frame_label = sample.frames[0].description.strip() if sample.frames else ""
-            action = f"Frame description: {frame_label or 'A frame from the post showing the main visible scene.'}"
+            frame_ocr = sample.frames[0].ocr_text.strip() if sample.frames else ""
+            action = (
+                f"Frame description: {frame_label or 'A frame from the post showing the main visible scene.'}\n"
+                f"OCR: {frame_ocr or '[none]'}"
+            )
         elif current_stage == "preliminary_analysis":
             action = (
                 "Preliminary reasoning: The extracted event makes a concrete factual claim whose credibility depends on whether the post provides trustworthy support rather than merely related imagery or framing.\n"

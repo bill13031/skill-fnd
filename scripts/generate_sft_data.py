@@ -36,6 +36,7 @@ def main() -> None:
         temperature=args.temperature,
         repetition_penalty=args.repetition_penalty,
         trust_remote_code=args.trust_remote_code,
+        attach_frames_first_step_only=False,
     )
     builder = SFTDataBuilder(analyzer_agent=analyzer_agent, worker_agent=worker_agent)
     rows = builder.build(samples)

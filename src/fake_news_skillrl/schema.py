@@ -12,6 +12,7 @@ class FrameRecord:
     frame_id: str
     path: str
     description: str = ""
+    ocr_text: str = ""
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any], default_index: int) -> "FrameRecord":
@@ -19,6 +20,7 @@ class FrameRecord:
             frame_id=str(payload.get("frame_id", default_index)),
             path=str(payload.get("path", "")),
             description=str(payload.get("description", "")),
+            ocr_text=str(payload.get("ocr_text", "")),
         )
 
 

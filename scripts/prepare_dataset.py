@@ -69,7 +69,7 @@ def _build_frame_description_prompt(sample: FakeNewsSample, frame_index: int) ->
     return "\n".join(
         [
             "You are preparing a fact-checking dataset.",
-            "Describe only what is visibly shown in this single frame.",
+            "For this single frame, do two things: describe only what is visibly shown, and transcribe any clearly readable text.",
             "Do not infer whether the post is fake or real.",
             "",
             "## Post Information",
@@ -79,16 +79,23 @@ def _build_frame_description_prompt(sample: FakeNewsSample, frame_index: int) ->
             "## Current Stage",
             "frame_description",
             "",
-            "Return exactly one plain-text line starting with 'Frame description: '.",
+            "Return exactly two plain-text lines in this format:",
+            "Frame description: ...",
+            "OCR: ...",
+            "If no readable text is visible, write 'OCR: [none]'.",
         ]
     )
 
 
-def _strip_prefixed_line(text: str, prefix: str) -> str:
+def _extract_prefixed_value(text: str, prefix: str) -> str:
+    for line in text.splitlines():
+        cleaned = line.strip()
+        if cleaned.lower().startswith(prefix.lower()):
+            return cleaned[len(prefix):].strip()
     cleaned = text.strip()
     if cleaned.lower().startswith(prefix.lower()):
         return cleaned[len(prefix):].strip()
-    return cleaned
+    return ""
 
 
 def _enrich_samples_with_agent(
@@ -112,13 +119,14 @@ def _enrich_samples_with_agent(
 
     for sample in samples:
         event_output = agent.next_action(sample, [], _build_event_extraction_prompt(sample))
-        extracted_event = _strip_prefixed_line(event_output, "Event:")
+        extracted_event = _extract_prefixed_value(event_output, "Event:")
         if extracted_event:
             sample.event_text = extracted_event
             sample.metadata["event"] = extracted_event
             sample.metadata["event_extraction_source"] = f"agent:{agent_type}"
             sample.metadata["event_extraction_model"] = model_name or getattr(agent, "model_name", agent_type)
 
+        frame_ocr_texts: list[str] = []
         for frame_index, frame in enumerate(sample.frames):
             frame_only_sample = FakeNewsSample(
                 sample_id=sample.sample_id,
@@ -138,11 +146,19 @@ def _enrich_samples_with_agent(
                 [],
                 _build_frame_description_prompt(sample, frame_index),
             )
-            described = _strip_prefixed_line(frame_output, "Frame description:")
+            described = _extract_prefixed_value(frame_output, "Frame description:")
+            ocr_text = _extract_prefixed_value(frame_output, "OCR:")
             if described:
                 frame.description = described
+            if ocr_text and ocr_text.lower() != "[none]":
+                frame.ocr_text = ocr_text
+                frame_ocr_texts.append(ocr_text)
         sample.metadata["frame_description_source"] = f"agent:{agent_type}"
         sample.metadata["frame_description_model"] = model_name or getattr(agent, "model_name", agent_type)
+        sample.metadata["ocr_source"] = f"agent:{agent_type}"
+        sample.metadata["ocr_model"] = model_name or getattr(agent, "model_name", agent_type)
+        if frame_ocr_texts:
+            sample.ocr_text = "\n".join(frame_ocr_texts)
 
 
 def main() -> None:

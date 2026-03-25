@@ -25,7 +25,16 @@ def _post_inputs_block(sample: FakeNewsSample, include_frames: bool = True) -> s
     if sample.ocr_text.strip():
         lines.append(f"OCR text: {sample.ocr_text}")
     if include_frames:
-        lines.append(f"Attached frames: {len(sample.frames)}")
+        described_frames = [
+            f"- Frame {frame.frame_id}: {frame.description.strip()}"
+            for frame in sample.frames
+            if frame.description.strip()
+        ]
+        if described_frames:
+            lines.append("Frame descriptions:")
+            lines.extend(described_frames)
+        else:
+            lines.append(f"Attached frames: {len(sample.frames)}")
     return "\n".join(lines)
 
 
