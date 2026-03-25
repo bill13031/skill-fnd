@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
+from .prompt_templates import PRELIMINARY_ANALYSIS_INSTRUCTION
 from .schema import FakeNewsSample
 
 
@@ -117,19 +118,10 @@ def build_stage_prompt(
 ) -> str:
     if stage == "preliminary_analysis":
         return (
-            "You are a professional supervisor of social media platform.\n"
-            "You're provided with the post's text, frames of videos.\n"
-            "Your job is to decide whether the post should be allowed to publish.\n"
-            "Harmful, non-factual, misleading posts are not allowed.\n"
-            "Think and make an aassessment from multiple perspective.\n"
-            "At this stage, reason about the extracted event itself rather than treating the raw post text or visuals as proof.\n"
-            "You may use the provided inputs as context, but do not treat them as automatically valid evidence.\n"
-            "You may use your own general world knowledge, historical knowledge, and common-sense reasoning.\n"
-            "Do not give the final verdict yet.\n\n"
+            PRELIMINARY_ANALYSIS_INSTRUCTION
             + _preliminary_analysis_context(sample, stage, step_index, max_steps)
-            + "Write exactly two plain-text lines in this format:\n"
-            + "Preliminary reasoning: a short reasoning passage about whether the extracted event seems credible, doubtful, misleading, or fabricated.\n"
-            + "Need: what verification skill or principle would significantly affect the conclusion, keep it short and concrete.\n"
+            + "Write exactly in this format:\n"
+            + "Reasoning: a short reasoning passage about whether the extracted event seems credible, doubtful, misleading, or fabricated.\n"
         )
 
     if stage == "worker_skill":
