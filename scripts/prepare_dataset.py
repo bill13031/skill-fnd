@@ -41,9 +41,8 @@ def _print_frame_extraction_summary(samples: list[object]) -> None:
 
 def _build_event_extraction_prompt(sample: FakeNewsSample) -> str:
     lines = [
-        "You are preparing a fact-checking dataset.",
         "Read the post information and attached frames, then extract the main real-world event or factual incident the post is trying to report.",
-        "Do not judge whether it is fake or real.",
+        "The extracted event should be complete.",
         "",
         "## Post Information",
         f"Post text: {sample.post_text}",
@@ -56,10 +55,7 @@ def _build_event_extraction_prompt(sample: FakeNewsSample) -> str:
         [
             f"Attached frames: {len(sample.frames)}",
             "",
-            "## Current Stage",
-            "event_extraction",
-            "",
-            "Return exactly one plain-text line starting with 'Event: '.",
+            "Return the event starting with 'Event: '.",
         ]
     )
     return "\n".join(lines)

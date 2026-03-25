@@ -73,7 +73,6 @@ def _preliminary_analysis_context(
         _saved_event_block(sample)
         + "## Post Context Reminder\n"
         f"{_post_inputs_block(sample, include_frames=False)}\n\n"
-        + _stage_header(stage, step_index, max_steps)
     )
 
 
@@ -89,7 +88,6 @@ def _worker_skill_context(
         _saved_event_block(sample)
         + _preliminary_analysis_block(stage_outputs)
         + build_skill_section(skill_prompt)
-        + _stage_header(stage, step_index, max_steps)
     )
 
 
@@ -106,7 +104,6 @@ def _verdict_context(
         + _worker_skill_block(stage_outputs)
         + "## Post Context Reminder\n"
         f"{_post_inputs_block(sample, include_frames=False)}\n\n"
-        + _stage_header(stage, step_index, max_steps)
     )
 
 
@@ -120,8 +117,11 @@ def build_stage_prompt(
 ) -> str:
     if stage == "preliminary_analysis":
         return (
-            "You are a professional fact-checker.\n"
-            "Think and make a preliminary fact-checking assessment of the given event.\n"
+            "You are a professional supervisor of social media platform.\n"
+            "You're provided with the post's text, frames of videos.\n"
+            "Your job is to decide whether the post should be allowed to publish.\n"
+            "Harmful, non-factual, misleading posts are not allowed.\n"
+            "Think and make an aassessment from multiple perspective.\n"
             "At this stage, reason about the extracted event itself rather than treating the raw post text or visuals as proof.\n"
             "You may use the provided inputs as context, but do not treat them as automatically valid evidence.\n"
             "You may use your own general world knowledge, historical knowledge, and common-sense reasoning.\n"
